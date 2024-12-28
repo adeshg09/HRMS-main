@@ -40,6 +40,7 @@ import useSnackbarClose from 'hooks/useSnackbarClose';
 import Loader from 'components/Loader';
 import {
   AddEmployeeAddressDetailsFormValues,
+  AddEmployeeDocumentsFormValues,
   AddEmployeeEducationDetailsFormValues,
   AddEmployeeEmergencyContactDetailsFormValues,
   AddEmployeeExperienceDetailsFormValues,
@@ -85,7 +86,12 @@ import { getRolesRequest } from 'services/company/role';
 /* Local Imports */
 
 import { getDate } from 'utility/formatDate';
+import { getDocumentType } from 'services/company/employee/documentDetails';
+import { DocumentModel } from 'models/company/DocumentType';
+import { UploadSingleImage } from 'components/InputFields/upload';
+import { ALLOWED_FILE_FORMATS } from 'components/InputFields/upload/UploadSingleFile';
 import adminStyle from '../../company.style';
+import DocumentUploadStep from './DocumentUploadStep';
 
 /* Constants */
 const manageEmployeePath = PAGE_COMPANY_DASHBOARD.employees.absolutePath;
@@ -114,6 +120,7 @@ const CreateEmployee = (): JSX.Element => {
     Array<ShortDesignationModel>
   >([]);
   const [roles, setRoles] = useState<Array<RoleModel>>([]);
+  const [documentTypes, setDocumentTypes] = useState<Array<DocumentModel>>([]);
   const [activeStep, setActiveStep] = useState(3);
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
@@ -211,6 +218,11 @@ const CreateEmployee = (): JSX.Element => {
     txtSupervisorPhone: ''
   } as AddEmployeeExperienceDetailsFormValues;
 
+  const initialValuesDocument = {
+    documentTypeId: 0,
+    employeeDocument: ''
+  } as AddEmployeeDocumentsFormValues;
+
   const initialValues = {
     ...initialValuesCreateUser,
     ...initialValuesPersonalDetails,
@@ -219,7 +231,8 @@ const CreateEmployee = (): JSX.Element => {
     educationDetails: [initialValuesEducationDetailsEntries],
     emergencyContactDetails: [initialValuesEmergencyContactDetailsEntries],
     ...initialValuesProfessionalDetails,
-    experienceDetails: [initialValuesExperienceDetailsEntries]
+    experienceDetails: [initialValuesExperienceDetailsEntries],
+    documentDetails: [initialValuesDocument]
   };
   const isLastStep = activeStep === steps.length - 1;
 
@@ -281,6 +294,23 @@ const CreateEmployee = (): JSX.Element => {
     setLoading(false);
   };
 
+  /**
+   * function to get all the roles with backend action
+   * @returns {void}
+   */
+  const handleGetDocumentTypes = async (): Promise<void> => {
+    setLoading(true);
+    try {
+      const response = await getDocumentType();
+      if (response && response.status.response_code === 200) {
+        setDocumentTypes(response.documentTypes);
+      } else {
+        showSnackbar(toastMessages.error.common, 'error');
+      }
+    } catch {
+      showSnackbar(toastMessages.error.common, 'error');
+    }
+  };
   /**
    * Submit function to save Employee Details based on Details type with backend action
    * @param {
@@ -838,14 +868,40 @@ const CreateEmployee = (): JSX.Element => {
           })
         )
         .min(1, 'Please add at least one experience record.')
+    }),
+    Yup.object().shape({
+      documentDetails: Yup.array().of(
+        Yup.object().shape({
+          documentTypeId: Yup.number().required('Document type is required'),
+          employeeDocument: Yup.mixed()
+            .required('Document is required')
+            .test('fileSize', 'File size must be less than 1MB', (value) => {
+              if (!value) return true; // Skip validation if no file is provided
+              const file = value as File; // Explicitly cast to File
+              return file.size <= 1000000;
+            })
+            .test(
+              'fileType',
+              'File type must be PDF, JPEG, JPG, or PNG',
+              (value) => {
+                if (!value) return true; // Skip validation if no file is provided
+                const file = value as File; // Explicitly cast to File
+                return ALLOWED_FILE_FORMATS.includes(file.type);
+              }
+            )
+        })
+      )
     })
   ];
   const currentValidationSchema = validationSchema[activeStep];
+  /* Side Efects */
 
   useEffect(() => {
     handleGetRoles();
     handleGetDesignations();
+    handleGetDocumentTypes();
   }, []);
+
   return (
     <Box sx={{ width: '100%' }}>
       <>
@@ -3617,7 +3673,16 @@ const CreateEmployee = (): JSX.Element => {
                             )}
                           </FieldArray>
                         )}
-
+                        {activeStep === 8 && (
+                          <DocumentUploadStep
+                            values={values}
+                            setFieldValue={setFieldValue}
+                            documentTypes={documentTypes}
+                            userId={userId}
+                            errors={errors}
+                            touched={touched}
+                          />
+                        )}
                         {/* {activeStep === 3 && (
                           <CardContent>
                             <Grid container spacing={2}>
