@@ -90,3 +90,8 @@ export interface AddEmployeeExperienceDetailsFormValues {
   txtSupervisorName: string;
   txtSupervisorPhone: string;
 }
+
+export interface AddEmployeeDocumentsFormValues {
+  documentTypeId: number;
+  employeeDocument: File | string | null;
+}
