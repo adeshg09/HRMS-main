@@ -25,9 +25,7 @@ import {
   IconButton,
   Accordion,
   AccordionSummary,
-  AccordionDetails,
-  stepConnectorClasses,
-  styled
+  AccordionDetails
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -118,7 +116,7 @@ import adminStyle from '../../company.style';
 const manageEmployeePath = PAGE_COMPANY_DASHBOARD.employees.absolutePath;
 
 const steps = [
-  'Account Setup',
+  'Create User',
   'Personal Details',
   'Professional Details',
   // 'Address Details',
@@ -148,9 +146,6 @@ const CreateEmployee = (): JSX.Element => {
   const [savedStepData, setSavedStepData] = useState<{ [key: number]: any }>(
     {}
   );
-  const [prevSavedStepData, setPrevSavedStepData] = useState<{
-    [key: number]: any;
-  }>({});
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
 
@@ -318,20 +313,16 @@ const CreateEmployee = (): JSX.Element => {
   };
 
   /**
-   * function to check if specific step data has changed
-   * @returns {boolean}
-   */
-
-  const hasStepDataChanged = async (stepNumber: number): Promise<boolean> => {
-    const currentStepData = savedStepData[stepNumber];
-    const previousStepData: any = prevSavedStepData[stepNumber];
-
-    return JSON.stringify(currentStepData) !== JSON.stringify(previousStepData);
-  };
-
-  /**
    * Submit function to save Employee Details based on Details type with backend action
-   * @param { AddEmployeeDetailsFormValues } values - input values of form
+   * @param {
+   * AddUserFormValues |
+   * AddEmployeePersonalDetailsFormValues |
+   * AddEmployeeProfessionalDetailsFormValues |
+   * AddEmployeeAddressDetailsFormValues |
+   * AddEmployeeFamilyDetailsFormValues |
+   * AddEmployeeEducationDetailsFormValues |
+   * AddEmployeeEmergencyContactDetailsFormValues |
+   * AddEmployeeExperienceDetailsFormValues} values - input values of form
    * @param {object} {setSubmitting} - function to check submission
    * @return {void}
    */
@@ -711,10 +702,8 @@ const CreateEmployee = (): JSX.Element => {
           setSubmitting(false);
           showSnackbar(
             completedSteps[0]
-              ? toastMessages.success.adminDashboard.employee
-                  .employeeAccountUpdated
-              : toastMessages.success.adminDashboard.employee
-                  .employeeAccountCreated,
+              ? toastMessages.success.adminDashboard.userUpdated
+              : toastMessages.success.adminDashboard.userSaved,
             'success'
           );
         } else if (response?.status.response_code === 205) {
@@ -1306,65 +1295,10 @@ const CreateEmployee = (): JSX.Element => {
   ];
   const currentValidationSchema = validationSchema[activeStep];
 
-  const CustomConnector = styled(StepConnector)(({ theme }) => ({
-    [`&.${stepConnectorClasses.alternativeLabel}`]: {
-      top: 22,
-      left: 'calc(-50% + 16px)', // Adjusted for better centering
-      right: 'calc(50% + 16px)'
-    },
-    [`&.${stepConnectorClasses.active}`]: {
-      [`& .${stepConnectorClasses.line}`]: {
-        borderColor: theme.palette.primary.main,
-        borderWidth: 2
-      }
-    },
-    [`&.${stepConnectorClasses.completed}`]: {
-      [`& .${stepConnectorClasses.line}`]: {
-        borderColor: theme.palette.primary.main
-      }
-    },
-    [`& .${stepConnectorClasses.line}`]: {
-      borderColor:
-        theme.palette.mode === 'dark' ? theme.palette.grey[800] : '#eaeaf0',
-      borderTopWidth: 2,
-      borderRadius: 4,
-      transition: 'all 0.3s ease' // Smooth transitions
-    }
-  }));
-
-  const CustomStepLabel = styled(StepLabel)(({ theme }) => ({
-    flexDirection: 'column',
-    '& .MuiStepLabel-iconContainer': {
-      paddingRight: 0,
-      marginBottom: 8
-    },
-    '& .MuiStepLabel-label': {
-      marginTop: 8,
-      fontSize: '0.875rem',
-      textAlign: 'center',
-      [theme.breakpoints.down('sm')]: {
-        fontSize: '0.75rem', // Smaller font on mobile
-        maxWidth: '80px', // Limit label width on mobile
-        wordWrap: 'break-word'
-      },
-      '&.Mui-active': {
-        color: theme.palette.primary.main,
-        fontWeight: 600,
-        transform: 'scale(1.1)',
-        transition: 'all 0.3s ease'
-      }
-    }
-  }));
-
   useEffect(() => {
     handleGetRoles();
     handleGetDesignations();
-    setPrevSavedStepData(savedStepData);
   }, []);
-
-  useEffect(() => {
-    setPrevSavedStepData(savedStepData);
-  }, [savedStepData]);
   return (
     <Box sx={{ width: '100%' }}>
       <>
@@ -1389,26 +1323,32 @@ const CreateEmployee = (): JSX.Element => {
                     isSubmitting,
                     touched,
                     values,
-                    setFieldValue
+                    setFieldValue,
+                    setFieldTouched
                   }) => (
                     <>
                       <Form autoComplete="off" onSubmit={handleSubmit}>
                         <Box sx={{ overflowX: 'auto', width: '100%' }}>
                           <Stepper
                             activeStep={activeStep}
-                            alternativeLabel
-                            connector={<CustomConnector />}
+                            connector={<StepConnector />}
                             sx={{
                               mt: 2,
-                              p: 1,
+                              p: 2,
                               minWidth: 'max-content'
                             }}
                           >
-                            {steps.map((label) => (
-                              <Step key={label}>
-                                <CustomStepLabel>{label}</CustomStepLabel>
-                              </Step>
-                            ))}
+                            {steps.map((label) => {
+                              const stepProps: { completed?: boolean } = {};
+                              const labelProps: {
+                                optional?: React.ReactNode;
+                              } = {};
+                              return (
+                                <Step key={label} {...stepProps}>
+                                  <StepLabel {...labelProps}>{label}</StepLabel>
+                                </Step>
+                              );
+                            })}
                           </Stepper>
                         </Box>
                         {activeStep === 0 && (
@@ -2678,47 +2618,38 @@ const CreateEmployee = (): JSX.Element => {
                                           />
                                         </Grid>
                                         <Grid item xs={12} sm={6} md={6}>
-                                          <LocalizationProvider
-                                            dateAdapter={AdapterDayjs}
-                                          >
-                                            <DatePicker
-                                              openTo="day"
-                                              inputFormat="DD/MM/YYYY"
-                                              value={values.txtBirthDate}
-                                              onChange={(newValue: any) => {
-                                                setFieldValue(
-                                                  'txtBirthDate',
-                                                  newValue
-                                                );
-                                              }}
-                                              renderInput={(params: any) => (
-                                                <CustomField
-                                                  name="txtBirthDate"
-                                                  label="Birth Date"
-                                                  error={Boolean(
-                                                    touched.txtBirthDate &&
-                                                      errors.txtBirthDate
-                                                  )}
-                                                  helperText={String(
-                                                    touched.txtBirthDate &&
-                                                      errors.txtBirthDate
-                                                  )}
-                                                >
-                                                  <TextField
-                                                    {...params}
-                                                    fullWidth
-                                                    size="medium"
-                                                    name="txtBirthDate"
-                                                    value={values.txtBirthDate}
-                                                    error={Boolean(
-                                                      touched.txtBirthDate &&
-                                                        errors.txtBirthDate
-                                                    )}
-                                                  />
-                                                </CustomField>
-                                              )}
-                                            />
-                                          </LocalizationProvider>
+                                          <TextInput
+                                            fullWidth
+                                            label="Birth Date"
+                                            name={`familyDetails.${index}.txtBirthDate`}
+                                            type="date"
+                                            value={
+                                              values.familyDetails[index]
+                                                .txtBirthDate
+                                            }
+                                            onChange={handleChange}
+                                            onBlur={handleBlur}
+                                            error={Boolean(
+                                              getIn(
+                                                touched,
+                                                `familyDetails.${index}.txtBirthDate`
+                                              ) &&
+                                                getIn(
+                                                  errors,
+                                                  `familyDetails.${index}.txtBirthDate`
+                                                )
+                                            )}
+                                            helperText={
+                                              getIn(
+                                                touched,
+                                                `familyDetails.${index}.txtBirthDate`
+                                              ) &&
+                                              getIn(
+                                                errors,
+                                                `familyDetails.${index}.txtBirthDate`
+                                              )
+                                            }
+                                          />
                                         </Grid>
                                         <Grid item xs={12} sm={6} md={6}>
                                           <TextInput
@@ -2948,7 +2879,7 @@ const CreateEmployee = (): JSX.Element => {
                             )}
                           </FieldArray>
                         )}
-                        {activeStep === 4 && (
+                        {activeStep === 5 && (
                           <FieldArray name="educationDetails">
                             {({ push, remove }) => (
                               <div
@@ -3392,7 +3323,7 @@ const CreateEmployee = (): JSX.Element => {
                             )}
                           </FieldArray>
                         )}
-                        {activeStep === 5 && (
+                        {activeStep === 6 && (
                           <FieldArray name="emergencyContactDetails">
                             {({ push, remove }) => (
                               <div
@@ -3616,7 +3547,7 @@ const CreateEmployee = (): JSX.Element => {
                             )}
                           </FieldArray>
                         )}
-                        {activeStep === 6 && (
+                        {activeStep === 7 && (
                           <FieldArray name="experienceDetails">
                             {({ push, remove }) => (
                               <div
@@ -4164,6 +4095,973 @@ const CreateEmployee = (): JSX.Element => {
                           </FieldArray>
                         )}
 
+                        {/* {activeStep === 3 && (
+                          <CardContent>
+                            <Grid container spacing={2}>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Select Relation Type"
+                                  name="ddlRelationType"
+                                  value={values.ddlRelationType}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlRelationType &&
+                                      errors.ddlRelationType
+                                  )}
+                                  helperText={String(
+                                    touched.ddlRelationType &&
+                                      errors.ddlRelationType
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {employeeFamilyDetails.relationType.map(
+                                    (option: any) => (
+                                      <MenuItem
+                                        key={option.id}
+                                        value={option.value}
+                                      >
+                                        {option.name}
+                                      </MenuItem>
+                                    )
+                                  )}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Name"
+                                  name="txtName"
+                                  value={values.txtName}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtName && errors.txtName
+                                  )}
+                                  helperText={String(
+                                    touched.txtName && errors.txtName
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Age"
+                                  name="txtAge"
+                                  type="number"
+                                  value={values.txtAge}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtAge && errors.txtAge
+                                  )}
+                                  helperText={String(
+                                    touched.txtAge && errors.txtAge
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <LocalizationProvider
+                                  dateAdapter={AdapterDayjs}
+                                >
+                                  <DatePicker
+                                    openTo="day"
+                                    inputFormat="DD/MM/YYYY"
+                                    value={values.txtBirthDate}
+                                    onChange={(newValue: any) => {
+                                      setFieldValue('txtBirthDate', newValue);
+                                    }}
+                                    renderInput={(params: any) => (
+                                      <CustomField
+                                        name="txtBirthDate"
+                                        label="Birth Date"
+                                        error={Boolean(
+                                          touched.txtBirthDate &&
+                                            errors.txtBirthDate
+                                        )}
+                                        helperText={String(
+                                          touched.txtBirthDate &&
+                                            errors.txtBirthDate
+                                        )}
+                                      >
+                                        <TextField
+                                          {...params}
+                                          fullWidth
+                                          size="medium"
+                                          name="txtBirthDate"
+                                          value={values.txtBirthDate}
+                                          error={Boolean(
+                                            touched.txtBirthDate &&
+                                              errors.txtBirthDate
+                                          )}
+                                        />
+                                      </CustomField>
+                                    )}
+                                  />
+                                </LocalizationProvider>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Select Birth Country"
+                                  name="ddlBirthCountry"
+                                  value={values.ddlBirthCountry}
+                                  onChange={(e) => {
+                                    handleChange(e);
+                                    handleCountryChange(
+                                      e.target.value as string
+                                    );
+                                  }}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlBirthCountry &&
+                                      errors.ddlBirthCountry
+                                  )}
+                                  helperText={String(
+                                    touched.ddlBirthCountry &&
+                                      errors.ddlBirthCountry
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {countries.map((option, i) => (
+                                    <MenuItem key={i} value={option.alpha2Code}>
+                                      {option.country}
+                                    </MenuItem>
+                                  ))}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Select State"
+                                  name="ddlBirthState"
+                                  value={values.ddlBirthState}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlBirthState &&
+                                      errors.ddlBirthState
+                                  )}
+                                  helperText={String(
+                                    touched.ddlBirthState &&
+                                      errors.ddlBirthState
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {states.map((option, i) => (
+                                    <MenuItem key={i} value={option}>
+                                      {option}
+                                    </MenuItem>
+                                  ))}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Birth Location"
+                                  name="txtBirthLocation"
+                                  value={values.txtBirthLocation}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtBirthLocation &&
+                                      errors.txtBirthLocation
+                                  )}
+                                  helperText={String(
+                                    touched.txtBirthLocation &&
+                                      errors.txtBirthLocation
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Occupation"
+                                  name="txtOccupation"
+                                  value={values.txtOccupation}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtOccupation &&
+                                      errors.txtOccupation
+                                  )}
+                                  helperText={String(
+                                    touched.txtOccupation &&
+                                      errors.txtOccupation
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Phone No"
+                                  name="txtPhone"
+                                  value={values.txtPhone}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtPhone && errors.txtPhone
+                                  )}
+                                  helperText={String(
+                                    touched.txtPhone && errors.txtPhone
+                                  )}
+                                />
+                              </Grid>
+                            </Grid>
+                          </CardContent>
+                        )}
+                        {activeStep === 4 && (
+                          <CardContent>
+                            <Grid container spacing={2}>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Course"
+                                  name="ddlCourse"
+                                  value={values.ddlCourse}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlCourse && errors.ddlCourse
+                                  )}
+                                  helperText={String(
+                                    touched.ddlCourse && errors.ddlCourse
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {employeeEducationDetails.course.map(
+                                    (option: any) => (
+                                      <MenuItem
+                                        key={option.id}
+                                        value={option.value}
+                                      >
+                                        {option.name}
+                                      </MenuItem>
+                                    )
+                                  )}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Degree Specialization"
+                                  name="txtDegreeSpecialization"
+                                  value={values.txtDegreeSpecialization}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtDegreeSpecialization &&
+                                      errors.txtDegreeSpecialization
+                                  )}
+                                  helperText={String(
+                                    touched.txtDegreeSpecialization &&
+                                      errors.txtDegreeSpecialization
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Institute Name"
+                                  name="txtInstituteName"
+                                  value={values.txtInstituteName}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtInstituteName &&
+                                      errors.txtInstituteName
+                                  )}
+                                  helperText={String(
+                                    touched.txtInstituteName &&
+                                      errors.txtInstituteName
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <LocalizationProvider
+                                  dateAdapter={AdapterDayjs}
+                                >
+                                  <DatePicker
+                                    openTo="day"
+                                    inputFormat="DD/MM/YYYY"
+                                    value={values.txtFromDate}
+                                    onChange={(newValue: any) => {
+                                      setFieldValue('txtFromDate', newValue);
+                                    }}
+                                    renderInput={(params: any) => (
+                                      <CustomField
+                                        name="txtFromDate"
+                                        label="From Date"
+                                        error={Boolean(
+                                          touched.txtFromDate &&
+                                            errors.txtFromDate
+                                        )}
+                                        helperText={String(
+                                          touched.txtFromDate &&
+                                            errors.txtFromDate
+                                        )}
+                                      >
+                                        <TextField
+                                          {...params}
+                                          fullWidth
+                                          size="medium"
+                                          name="txtFromDate"
+                                          value={values.txtFromDate}
+                                          error={Boolean(
+                                            touched.txtFromDate &&
+                                              errors.txtFromDate
+                                          )}
+                                        />
+                                      </CustomField>
+                                    )}
+                                  />
+                                </LocalizationProvider>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <LocalizationProvider
+                                  dateAdapter={AdapterDayjs}
+                                >
+                                  <DatePicker
+                                    openTo="day"
+                                    inputFormat="DD/MM/YYYY"
+                                    value={values.txtToDate}
+                                    onChange={(newValue: any) => {
+                                      setFieldValue('txtToDate', newValue);
+                                    }}
+                                    renderInput={(params: any) => (
+                                      <CustomField
+                                        name="txtToDate"
+                                        label="To Date"
+                                        error={Boolean(
+                                          touched.txtToDate && errors.txtToDate
+                                        )}
+                                        helperText={String(
+                                          touched.txtToDate && errors.txtToDate
+                                        )}
+                                      >
+                                        <TextField
+                                          {...params}
+                                          fullWidth
+                                          size="medium"
+                                          name="txtToDate"
+                                          value={values.txtToDate}
+                                          error={Boolean(
+                                            touched.txtToDate &&
+                                              errors.txtToDate
+                                          )}
+                                        />
+                                      </CustomField>
+                                    )}
+                                  />
+                                </LocalizationProvider>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Status"
+                                  name="ddlStatus"
+                                  value={values.ddlStatus}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlStatus && errors.ddlStatus
+                                  )}
+                                  helperText={String(
+                                    touched.ddlStatus && errors.ddlStatus
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {employeeEducationDetails.status.map(
+                                    (option: any) => (
+                                      <MenuItem
+                                        key={option.id}
+                                        value={option.value}
+                                      >
+                                        {option.name}
+                                      </MenuItem>
+                                    )
+                                  )}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Study Mode"
+                                  name="ddlStudyMode"
+                                  value={values.ddlStudyMode}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlStudyMode && errors.ddlStudyMode
+                                  )}
+                                  helperText={String(
+                                    touched.ddlStudyMode && errors.ddlStudyMode
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {employeeEducationDetails.studyMode.map(
+                                    (option: any) => (
+                                      <MenuItem
+                                        key={option.id}
+                                        value={option.value}
+                                      >
+                                        {option.name}
+                                      </MenuItem>
+                                    )
+                                  )}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Percentage"
+                                  name="txtPercentage"
+                                  type="number"
+                                  value={values.txtPercentage}
+                                  inputProps={{ min: 0, max: 100 }}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtPercentage &&
+                                      errors.txtPercentage
+                                  )}
+                                  helperText={String(
+                                    touched.txtPercentage &&
+                                      errors.txtPercentage
+                                  )}
+                                />
+                              </Grid>
+                            </Grid>
+                          </CardContent>
+                        )}
+                        {activeStep === 5 && (
+                          <CardContent>
+                            <Grid container spacing={2}>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Contact Name"
+                                  name="txtContactName"
+                                  value={values.txtContactName}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtContactName &&
+                                      errors.txtContactName
+                                  )}
+                                  helperText={String(
+                                    touched.txtContactName &&
+                                      errors.txtContactName
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Contact Address"
+                                  name="txtContactAddress"
+                                  value={values.txtContactAddress}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtContactAddress &&
+                                      errors.txtContactAddress
+                                  )}
+                                  helperText={String(
+                                    touched.txtContactAddress &&
+                                      errors.txtContactAddress
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Contact Relation"
+                                  name="ddlContactRelation"
+                                  value={values.ddlContactRelation}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlContactRelation &&
+                                      errors.ddlContactRelation
+                                  )}
+                                  helperText={String(
+                                    touched.ddlContactRelation &&
+                                      errors.ddlContactRelation
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {employeeEmergencyContactDetails.contactRelation.map(
+                                    (option: any) => (
+                                      <MenuItem
+                                        key={option.id}
+                                        value={option.value}
+                                      >
+                                        {option.name}
+                                      </MenuItem>
+                                    )
+                                  )}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Phone Number"
+                                  name="txtPhone"
+                                  type="number"
+                                  value={values.txtPhone}
+                                  inputProps={{ maxLength: 10 }}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtPhone && errors.txtPhone
+                                  )}
+                                  helperText={String(
+                                    touched.txtPhone && errors.txtPhone
+                                  )}
+                                />
+                              </Grid>
+                            </Grid>
+                          </CardContent>
+                        )}
+                        {activeStep === 6 && (
+                          <CardContent>
+                            <Grid container spacing={2}>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Employee Code"
+                                  name="txtEmployeeCode"
+                                  value={values.txtEmployeeCode}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtEmployeeCode &&
+                                      errors.txtEmployeeCode
+                                  )}
+                                  helperText={String(
+                                    touched.txtEmployeeCode &&
+                                      errors.txtEmployeeCode
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Select Designation"
+                                  name="ddlDesignation"
+                                  value={values.ddlDesignation}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlDesignation &&
+                                      errors.ddlDesignation
+                                  )}
+                                  helperText={String(
+                                    touched.ddlDesignation &&
+                                      errors.ddlDesignation
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {designations.map((option: any) => (
+                                    <MenuItem
+                                      key={option.id}
+                                      value={option.value}
+                                    >
+                                      {option.name}
+                                    </MenuItem>
+                                  ))}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <LocalizationProvider
+                                  dateAdapter={AdapterDayjs}
+                                >
+                                  <DatePicker
+                                    openTo="day"
+                                    inputFormat="DD/MM/YYYY"
+                                    value={values.txtJoinDate}
+                                    onChange={(newValue: any) => {
+                                      setFieldValue('txtJoinDate', newValue);
+                                    }}
+                                    renderInput={(params: any) => (
+                                      <CustomField
+                                        name="txtJoinDate"
+                                        label="Join Date"
+                                        error={Boolean(
+                                          touched.txtJoinDate &&
+                                            errors.txtJoinDate
+                                        )}
+                                        helperText={String(
+                                          touched.txtJoinDate &&
+                                            errors.txtJoinDate
+                                        )}
+                                      >
+                                        <TextField
+                                          {...params}
+                                          fullWidth
+                                          size="medium"
+                                          name="txtJoinDate"
+                                          value={values.txtJoinDate}
+                                          error={Boolean(
+                                            touched.txtJoinDate &&
+                                              errors.txtJoinDate
+                                          )}
+                                        />
+                                      </CustomField>
+                                    )}
+                                  />
+                                </LocalizationProvider>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Employment Type"
+                                  name="ddlEmploymentType"
+                                  value={values.ddlEmploymentType}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlEmploymentType &&
+                                      errors.ddlEmploymentType
+                                  )}
+                                  helperText={String(
+                                    touched.ddlEmploymentType &&
+                                      errors.ddlEmploymentType
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {employeeProfessionalDetails.employmentType.map(
+                                    (option: any) => (
+                                      <MenuItem
+                                        key={option.id}
+                                        value={option.value}
+                                      >
+                                        {option.name}
+                                      </MenuItem>
+                                    )
+                                  )}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Working Type"
+                                  name="ddlWorkingType"
+                                  value={values.ddlWorkingType}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlWorkingType &&
+                                      errors.ddlWorkingType
+                                  )}
+                                  helperText={String(
+                                    touched.ddlWorkingType &&
+                                      errors.ddlWorkingType
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {employeeProfessionalDetails.workingType.map(
+                                    (option: any) => (
+                                      <MenuItem
+                                        key={option.id}
+                                        value={option.value}
+                                      >
+                                        {option.name}
+                                      </MenuItem>
+                                    )
+                                  )}
+                                </SelectInput>
+                              </Grid>
+                            </Grid>
+                          </CardContent>
+                        )}
+                        {activeStep === 7 && (
+                          <CardContent>
+                            <Grid container spacing={2}>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Company Name"
+                                  name="txtCompanyName"
+                                  value={values.txtCompanyName}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtCompanyName &&
+                                      errors.txtCompanyName
+                                  )}
+                                  helperText={String(
+                                    touched.txtCompanyName &&
+                                      errors.txtCompanyName
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Employee ID"
+                                  name="txtEmployeeId"
+                                  value={values.txtEmployeeId}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtEmployeeId &&
+                                      errors.txtEmployeeId
+                                  )}
+                                  helperText={String(
+                                    touched.txtEmployeeId &&
+                                      errors.txtEmployeeId
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Job Title"
+                                  name="txtJobTitle"
+                                  value={values.txtJobTitle}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtJobTitle && errors.txtJobTitle
+                                  )}
+                                  helperText={String(
+                                    touched.txtJobTitle && errors.txtJobTitle
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <LocalizationProvider
+                                  dateAdapter={AdapterDayjs}
+                                >
+                                  <DatePicker
+                                    openTo="day"
+                                    inputFormat="DD/MM/YYYY"
+                                    value={values.txtStartDate}
+                                    onChange={(newValue: any) => {
+                                      setFieldValue('txtStartDate', newValue);
+                                    }}
+                                    renderInput={(params: any) => (
+                                      <CustomField
+                                        name="txtStartDate"
+                                        label="Start Date"
+                                        error={Boolean(
+                                          touched.txtStartDate &&
+                                            errors.txtStartDate
+                                        )}
+                                        helperText={String(
+                                          touched.txtStartDate &&
+                                            errors.txtStartDate
+                                        )}
+                                      >
+                                        <TextField
+                                          {...params}
+                                          fullWidth
+                                          size="medium"
+                                          name="txtStartDate"
+                                          value={values.txtStartDate}
+                                          error={Boolean(
+                                            touched.txtStartDate &&
+                                              errors.txtStartDate
+                                          )}
+                                        />
+                                      </CustomField>
+                                    )}
+                                  />
+                                </LocalizationProvider>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <LocalizationProvider
+                                  dateAdapter={AdapterDayjs}
+                                >
+                                  <DatePicker
+                                    openTo="day"
+                                    inputFormat="DD/MM/YYYY"
+                                    value={values.txtEndDate}
+                                    onChange={(newValue: any) => {
+                                      setFieldValue('txtEndDate', newValue);
+                                    }}
+                                    renderInput={(params: any) => (
+                                      <CustomField
+                                        name="txtEndDate"
+                                        label="End Date"
+                                        error={Boolean(
+                                          touched.txtEndDate &&
+                                            errors.txtEndDate
+                                        )}
+                                        helperText={String(
+                                          touched.txtEndDate &&
+                                            errors.txtEndDate
+                                        )}
+                                      >
+                                        <TextField
+                                          {...params}
+                                          fullWidth
+                                          size="medium"
+                                          name="txtEndDate"
+                                          value={values.txtEndDate}
+                                          error={Boolean(
+                                            touched.txtEndDate &&
+                                              errors.txtEndDate
+                                          )}
+                                        />
+                                      </CustomField>
+                                    )}
+                                  />
+                                </LocalizationProvider>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Select Country"
+                                  name="ddlCountry"
+                                  value={values.ddlCountry}
+                                  onChange={(e) => {
+                                    handleChange(e);
+                                    handleCountryChange(
+                                      e.target.value as string
+                                    );
+                                  }}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlCountry && errors.ddlCountry
+                                  )}
+                                  helperText={String(
+                                    touched.ddlCountry && errors.ddlCountry
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {countries.map((option, i) => (
+                                    <MenuItem key={i} value={option.alpha2Code}>
+                                      {option.country}
+                                    </MenuItem>
+                                  ))}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Select State"
+                                  name="ddlState"
+                                  value={values.ddlState}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlState && errors.ddlState
+                                  )}
+                                  helperText={String(
+                                    touched.ddlState && errors.ddlState
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {states.map((option, i) => (
+                                    <MenuItem key={i} value={option}>
+                                      {option}
+                                    </MenuItem>
+                                  ))}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="City"
+                                  name="txtCity"
+                                  value={values.txtCity}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtCity && errors.txtCity
+                                  )}
+                                  helperText={String(
+                                    touched.txtCity && errors.txtCity
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <SelectInput
+                                  label="Employment Type"
+                                  name="ddlEmploymentType"
+                                  value={values.ddlEmploymentType}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.ddlEmploymentType &&
+                                      errors.ddlEmploymentType
+                                  )}
+                                  helperText={String(
+                                    touched.ddlEmploymentType &&
+                                      errors.ddlEmploymentType
+                                  )}
+                                >
+                                  <MenuItem key="-1" value="">
+                                    - None -
+                                  </MenuItem>
+                                  {employeeProfessionalDetails.employmentType.map(
+                                    (option: any) => (
+                                      <MenuItem
+                                        key={option.id}
+                                        value={option.value}
+                                      >
+                                        {option.name}
+                                      </MenuItem>
+                                    )
+                                  )}
+                                </SelectInput>
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Supervisor Name"
+                                  name="txtSupervisorName"
+                                  value={values.txtSupervisorName}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtSupervisorName &&
+                                      errors.txtSupervisorName
+                                  )}
+                                  helperText={String(
+                                    touched.txtSupervisorName &&
+                                      errors.txtSupervisorName
+                                  )}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6} md={6}>
+                                <TextInput
+                                  fullWidth
+                                  label="Supervisor Phone No"
+                                  type="number"
+                                  name="txtSupervisorPhone"
+                                  value={values.txtSupervisorPhone}
+                                  onChange={handleChange}
+                                  onBlur={handleBlur}
+                                  error={Boolean(
+                                    touched.txtSupervisorPhone &&
+                                      errors.txtSupervisorPhone
+                                  )}
+                                  helperText={String(
+                                    touched.txtSupervisorPhone &&
+                                      errors.txtSupervisorPhone
+                                  )}
+                                />
+                              </Grid>
+                            </Grid>
+                          </CardContent>
+                        )} */}
                         <CardActions>
                           <Button
                             color="secondary"
@@ -4180,7 +5078,9 @@ const CreateEmployee = (): JSX.Element => {
                             type="submit"
                             disabled={isSubmitting}
                           >
-                            {isLastStep ? 'Save' : 'Next Step'}
+                            {activeStep === steps.length - 1
+                              ? 'Save'
+                              : 'Next Step'}
                           </Button>
                         </CardActions>
                       </Form>

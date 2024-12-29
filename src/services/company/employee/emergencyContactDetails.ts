@@ -6,8 +6,17 @@
 import axiosInstance from 'config/axiosConfig';
 
 // ----------------------------------------------------------------------
+
+interface EmergencyContact {
+  contactName: string;
+  contactAddress: string;
+  contactRelation: string;
+  phone: string;
+  userId: number | null;
+}
+
 export const insertEmployeeEmergencyContactDetailRequest = (
-  reqData: FormData
+  reqData: EmergencyContact[]
 ): Promise<any> => {
   return axiosInstance
     .post(
@@ -23,11 +32,12 @@ export const insertEmployeeEmergencyContactDetailRequest = (
 };
 
 export const updateEmployeeEmergencyContactDetailRequest = (
-  reqData: FormData
+  userId: number | null,
+  reqData: EmergencyContact[]
 ): Promise<any> => {
   return axiosInstance
     .put(
-      'admin/company/employeeEmergencyContact/UpdateEmployeeEmergencyContact',
+      `admin/company/employeeEmergencyContact/UpdateEmployeeEmergencyContact/${userId}`,
       reqData,
       {
         headers: {

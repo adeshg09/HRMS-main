@@ -99,6 +99,14 @@ export const toastMessages = {
 
       // Employee Management
       employee: {
+        // Account Setup Details
+        employeeAccountCreated: 'Employee account created successfully.',
+        employeeAccountUpdated: 'Employee account updated successfully.',
+        employeeStatusUpdated: "Employee's status updated successfully.",
+        employeeActivityStatusUpdated:
+          "Employee's activity status updated successfully.",
+        employeeAccountDeleted: 'Employee account deleted successfully.',
+
         // Personal Details
         employeePersonalDetailsSaved:
           'Employee Personal Details saved successfully.',
