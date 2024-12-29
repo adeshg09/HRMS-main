@@ -23,11 +23,12 @@ export const insertEmployeeExperienceDetailRequest = (
 };
 
 export const updateEmployeeExperienceDetailRequest = (
+  userId: number | null,
   reqData: FormData
 ): Promise<any> => {
   return axiosInstance
     .put(
-      'admin/company/employeeExperienceDetail/UpdateEmployeeExperienceDetail',
+      `admin/company/employeeExperienceDetail/UpdateEmployeeExperienceDetail/${userId}`,
       reqData,
       {
         headers: {

@@ -11,7 +11,7 @@ const editEmployeePath = PAGE_COMPANY_DASHBOARD.employees.edit.relativePath;
  * @returns {JSX.Element}
  */
 const ManageEmployee = (): JSX.Element => {
-  return <div>ManageEmployee</div>;
+  return <div>EditEmployee</div>;
 };
 
 export default ManageEmployee;
