@@ -7,7 +7,7 @@ import axiosInstance from 'config/axiosConfig';
 
 // ----------------------------------------------------------------------
 export const insertEmployeeEducationalDetailRequest = (
-  reqData: FormData
+  reqData: any
 ): Promise<any> => {
   return axiosInstance
     .post(

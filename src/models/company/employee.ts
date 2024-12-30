@@ -61,6 +61,7 @@ export interface AddEmployeeAddressDetailsFormValues {
   txtStreetName: string;
   txtLandmark: string;
   txtCity: string;
+  ddlCountry: string;
   ddlState: string;
   txtPincode: string;
   txtTelephoneNumber: string;
@@ -90,6 +91,11 @@ export interface AddEmployeeExperienceDetailsFormValues {
   ddlEmploymentType: string;
   txtSupervisorName: string;
   txtSupervisorPhone: string;
+}
+
+export interface AddEmployeeDocumentsFormValues {
+  documentTypeId: number;
+  employeeDocument: File | string | null;
 }
 
 export interface AddEmployeeDetailsFormValues {
@@ -127,6 +133,7 @@ export interface AddEmployeeDetailsFormValues {
   educationDetails: AddEmployeeEducationDetailsFormValues[];
   emergencyContactDetails: AddEmployeeEmergencyContactDetailsFormValues[];
   experienceDetails: AddEmployeeExperienceDetailsFormValues[];
+  documentDetails: AddEmployeeDocumentsFormValues[];
 }
 
 /* Edit Employee Form interfaces */

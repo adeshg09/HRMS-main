@@ -16,7 +16,7 @@ interface EmergencyContact {
 }
 
 export const insertEmployeeEmergencyContactDetailRequest = (
-  reqData: EmergencyContact[]
+  reqData: any
 ): Promise<any> => {
   return axiosInstance
     .post(

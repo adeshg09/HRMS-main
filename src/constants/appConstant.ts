@@ -163,7 +163,10 @@ export const toastMessages = {
           'Employee Document Details saved successfully.',
         employeeDocumentDetailsUpdated:
           'Employee Document Details updated successfully.',
-        employeeDocumentDeleted: 'Employee Document deleted successfully.'
+        employeeDocumentDeleted: 'Employee Document deleted successfully.',
+
+        // onboard Details
+        employeeOnboard: 'Employee Onboarded Successfully'
       },
       public: {
         companyRegistered: 'Company registered successfully.'
