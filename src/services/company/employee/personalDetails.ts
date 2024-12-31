@@ -41,3 +41,13 @@ export const updateEmployeePersonalDetailRequest = (
     )
     .then((response) => response.data);
 };
+
+export const getEmployeePersonalDetailsByUserIdRequest = (
+  userId: number | null
+): Promise<any> => {
+  return axiosInstance
+    .get(
+      `admin/company/employeePersonalDetail/GetEmployeePersonalDetailByUserId/${userId}`
+    )
+    .then((response) => response.data);
+};

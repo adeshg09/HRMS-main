@@ -38,3 +38,13 @@ export const updateEmployeeExperienceDetailRequest = (
     )
     .then((response) => response.data);
 };
+
+export const getEmployeeExperienceDetailsByUserIdRequest = (
+  userId: number | null
+): Promise<any> => {
+  return axiosInstance
+    .get(
+      `admin/company/employeeExperienceDetail/GetEmployeeExperienceDetailsByUserId/${userId}`
+    )
+    .then((response) => response.data);
+};

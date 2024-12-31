@@ -9,6 +9,16 @@ export interface AddUserFormValues {
   chkIsActive: boolean;
   chkShowActivity?: boolean;
 }
+export interface UserValues {
+  first_name: string;
+  last_name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  roles: Array<number>;
+  is_active: boolean;
+  show_activity?: boolean;
+}
 
 export interface AddEmployeePersonalDetailsFormValues {
   txtBirthDate: string;
@@ -26,12 +36,35 @@ export interface AddEmployeePersonalDetailsFormValues {
   txtResidence?: string;
 }
 
+export interface PersonalDetailsValues {
+  birth_date: string;
+  age: number;
+  birth_country: string;
+  birth_state: string;
+  birth_location: string;
+  gender: string;
+  marital_status: string;
+  marriage_date?: string;
+  blood_group: string;
+  pan_number: string;
+  caste: string;
+  religion: string;
+  residence?: string;
+}
+
 export interface AddEmployeeProfessionalDetailsFormValues {
   txtEmployeeCode: string;
   ddlDesignation: number | '';
   txtJoinDate: string;
   ddlEmploymentType: string;
   ddlWorkingType: string;
+}
+export interface ProfessionalDetailsValues {
+  employee_code: string;
+  designation_id: number | '';
+  join_date: string;
+  employment_type: string;
+  working_type: string;
 }
 
 export interface AddEmployeeFamilyDetailsFormValues {

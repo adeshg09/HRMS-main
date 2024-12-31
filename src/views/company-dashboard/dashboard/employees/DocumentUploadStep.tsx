@@ -223,19 +223,6 @@ const DocumentUploadStep: React.FC<DocumentUploadStepProps> = ({
     }));
   };
 
-  // const renderDocumentPreview = (file: File) => {
-  //   if (file.type.startsWith('image/')) {
-  //     return <img src={URL.createObjectURL(file)} alt="Document preview" />;
-  //   }
-  //   if (file.type === 'application/pdf') {
-  //     return <iframe src={URL.createObjectURL(file)} title="PDF preview" />;
-  //   }
-  //   return (
-  //     <Typography variant="body2" color="textSecondary">
-  //       {file.name}
-  //     </Typography>
-  //   );
-  // };
   const renderDocumentPreview = (file: File): React.ReactNode => {
     if (file.type.startsWith('image/')) {
       return <img src={URL.createObjectURL(file)} alt="Document preview" />;

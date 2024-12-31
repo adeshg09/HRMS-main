@@ -47,3 +47,13 @@ export const updateEmployeeEmergencyContactDetailRequest = (
     )
     .then((response) => response.data);
 };
+
+export const getEmployeeEmergencyContactDetailsByUserIdRequest = (
+  userId: number | null
+): Promise<any> => {
+  return axiosInstance
+    .get(
+      `admin/company/employeeEmergencyContact/GetEmployeeEmergencyContactsByUserId/${userId}`
+    )
+    .then((response) => response.data);
+};

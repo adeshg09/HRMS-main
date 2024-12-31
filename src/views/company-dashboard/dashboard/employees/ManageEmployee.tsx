@@ -63,6 +63,7 @@ import {
   updateUserActivityStatusRequest,
   updateUserStatusRequest
 } from 'services/company/employee/accountSetup';
+import { ProfessionalDetailsValues } from 'models/company/employee';
 import adminStyle from '../../company.style';
 
 // ----------------------------------------------------------------------
@@ -111,6 +112,8 @@ const ManageEmployee = (): JSX.Element => {
   /* States */
   const [rows, setRows] = useState<Array<UserProfileModel>>([]);
   const [originalData, setOriginalData] = useState<Array<UserProfileModel>>([]);
+  const [employeeProfessionalDetailsData, setEmployeeProfessionalDetailsData] =
+    useState<ProfessionalDetailsValues>();
   const [deleteDialog, setDeleteDialog] = useState(initialStateDeleteDialog);
   const [statusDialog, setStatusDialog] = useState(initialStateStatusDialog);
   const [showActvityDialog, setShowActivityDialog] = useState(
@@ -276,6 +279,7 @@ const ManageEmployee = (): JSX.Element => {
     setLoading(true);
     try {
       const response = await getUsersRequest();
+      console.log('users are', response);
       if (response?.status.response_code === 200) {
         setRows(response.users || []);
         setOriginalData(response.users || []);
@@ -474,26 +478,26 @@ const ManageEmployee = (): JSX.Element => {
       renderCell: (params: UserProfileModel) =>
         `${params.first_name} ${params.last_name}`
     },
-    // {
-    //   field: 'employee_code',
-    //   headerName: 'Employee Code',
-    //   sortable: true,
-    //   width: 160,
-    //   renderCell: (params: UserProfileModel) =>
-    //     params.profile.employee_code || '-'
-    // },
+    {
+      field: 'employee_code',
+      headerName: 'Employee Code',
+      sortable: true,
+      width: 160,
+      renderCell: (params: ProfessionalDetailsValues) =>
+        params.employee_code || '-'
+    },
     {
       field: 'email',
       headerName: 'Email Address',
       sortable: true,
       width: 230
     },
-    {
-      field: 'phone',
-      headerName: 'Phone No',
-      sortable: true,
-      width: 130
-    },
+    // {
+    //   field: 'phone',
+    //   headerName: 'Phone No',
+    //   sortable: true,
+    //   width: 130
+    // },
     {
       field: 'roles',
       headerName: 'Assigned Roles',

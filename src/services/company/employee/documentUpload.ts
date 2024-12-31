@@ -23,3 +23,13 @@ export const updateEmployeeDocument = async (
     formData
   );
 };
+
+export const getEmployeeDocumentDetailsByUserIdRequest = (
+  userId: number | null
+): Promise<any> => {
+  return axiosInstance
+    .get(
+      `admin/company/employeeDocument/GetEmployeeDocumentsByUserId/${userId}`
+    )
+    .then((response) => response.data);
+};

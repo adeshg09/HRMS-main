@@ -39,3 +39,13 @@ export const updateEmployeeFamilyDetailRequest = (
     )
     .then((response) => response.data);
 };
+
+export const getEmployeeFamilyDetailsByUserIdRequest = (
+  userId: number | null
+): Promise<any> => {
+  return axiosInstance
+    .get(
+      `admin/company/employeeFamilyDetail/GetEmployeeFamilyDetailsByUserId/${userId}`
+    )
+    .then((response) => response.data);
+};

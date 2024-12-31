@@ -34,3 +34,11 @@ export const updateEmployeeAddressDetailRequest = (
     )
     .then((response) => response.data);
 };
+
+export const getEmployeeAddressDetailsByUserIdRequest = (
+  userId: number | null
+): Promise<any> => {
+  return axiosInstance
+    .get(`admin/company/employeeAddress/GetEmployeeAddressesByUserId/${userId}`)
+    .then((response) => response.data);
+};
