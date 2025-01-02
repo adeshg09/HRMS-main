@@ -12,7 +12,7 @@ export const registerUserRequest = (reqData: FormData): Promise<any> => {
 };
 
 export const updateUserRequest = (
-  userId: number,
+  userId: number | null,
   reqData: FormData
 ): Promise<any> => {
   return axiosInstance

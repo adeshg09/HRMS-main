@@ -4,10 +4,11 @@
 
 /* Relative Imports */
 import axiosInstance from 'config/axiosConfig';
+import { AddEmployeeFamilyDetailsFormValues } from 'models/company/employee';
 
 // ----------------------------------------------------------------------
 export const insertEmployeeFamilyDetailRequest = (
-  reqData: FormData
+  reqData: any
 ): Promise<any> => {
   return axiosInstance
     .post(
@@ -23,17 +24,28 @@ export const insertEmployeeFamilyDetailRequest = (
 };
 
 export const updateEmployeeFamilyDetailRequest = (
+  userId: number | null,
   reqData: FormData
 ): Promise<any> => {
   return axiosInstance
     .put(
-      'admin/company/employeeFamilyDetail/UpdateEmployeeFamilyDetail',
+      `admin/company/employeeFamilyDetail/UpdateEmployeeFamilyDetail/${userId}`,
       reqData,
       {
         headers: {
           'Content-Type': 'application/json'
         }
       }
+    )
+    .then((response) => response.data);
+};
+
+export const getEmployeeFamilyDetailsByUserIdRequest = (
+  userId: number | null
+): Promise<any> => {
+  return axiosInstance
+    .get(
+      `admin/company/employeeFamilyDetail/GetEmployeeFamilyDetailsByUserId/${userId}`
     )
     .then((response) => response.data);
 };

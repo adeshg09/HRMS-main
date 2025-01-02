@@ -189,7 +189,7 @@ const ManageUser = (): JSX.Element => {
   };
 
   /**
-   * function to open the status dialog box
+   * function to open the show activity dialog box
    *
    * @param {number} userId - id of selected user to update status
    * @param {string} userName - name of selected user to confirm

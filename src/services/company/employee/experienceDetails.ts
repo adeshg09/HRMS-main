@@ -7,7 +7,7 @@ import axiosInstance from 'config/axiosConfig';
 
 // ----------------------------------------------------------------------
 export const insertEmployeeExperienceDetailRequest = (
-  reqData: FormData
+  reqData: any
 ): Promise<any> => {
   return axiosInstance
     .post(
@@ -23,17 +23,28 @@ export const insertEmployeeExperienceDetailRequest = (
 };
 
 export const updateEmployeeExperienceDetailRequest = (
+  userId: number | null,
   reqData: FormData
 ): Promise<any> => {
   return axiosInstance
     .put(
-      'admin/company/employeeExperienceDetail/UpdateEmployeeExperienceDetail',
+      `admin/company/employeeExperienceDetail/UpdateEmployeeExperienceDetail/${userId}`,
       reqData,
       {
         headers: {
           'Content-Type': 'application/json'
         }
       }
+    )
+    .then((response) => response.data);
+};
+
+export const getEmployeeExperienceDetailsByUserIdRequest = (
+  userId: number | null
+): Promise<any> => {
+  return axiosInstance
+    .get(
+      `admin/company/employeeExperienceDetail/GetEmployeeExperienceDetailsByUserId/${userId}`
     )
     .then((response) => response.data);
 };

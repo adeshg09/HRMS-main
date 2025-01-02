@@ -1,7 +1,7 @@
 /* Imports */
 import { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FieldArray, Form, Formik, getIn } from 'formik';
+import { FieldArray, Form, Formik, FormikHelpers, getIn } from 'formik';
 import * as Yup from 'yup';
 import moment from 'moment';
 import {
@@ -25,7 +25,9 @@ import {
   IconButton,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  styled,
+  stepConnectorClasses
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -40,6 +42,8 @@ import useSnackbarClose from 'hooks/useSnackbarClose';
 import Loader from 'components/Loader';
 import {
   AddEmployeeAddressDetailsFormValues,
+  AddEmployeeDetailsFormValues,
+  AddEmployeeDocumentsFormValues,
   AddEmployeeEducationDetailsFormValues,
   AddEmployeeEmergencyContactDetailsFormValues,
   AddEmployeeExperienceDetailsFormValues,
@@ -64,15 +68,39 @@ import {
   toastMessages
 } from 'constants/appConstant';
 import { getDesignationsRequest } from 'services/company/designation';
-import { insertEmployeePersonalDetailRequest } from 'services/company/employee/personalDetails';
+import {
+  insertEmployeePersonalDetailRequest,
+  updateEmployeePersonalDetailRequest
+} from 'services/company/employee/personalDetails';
 import { AdminDashboardPage } from 'components/Page';
-import { registerUserRequest } from 'services/company/employee/createUser';
-import { insertEmployeeProfessionalDetailRequest } from 'services/company/employee/professionalDetails';
-import { insertEmployeeFamilyDetailRequest } from 'services/company/employee/familyDetails';
-import { insertEmployeeEmergencyContactDetailRequest } from 'services/company/employee/emergencyContactDetails';
-import { insertEmployeeAddressDetailRequest } from 'services/company/employee/addressDetails';
-import { insertEmployeeEducationalDetailRequest } from 'services/company/employee/educationDetails';
-import { insertEmployeeExperienceDetailRequest } from 'services/company/employee/experienceDetails';
+import {
+  registerUserRequest,
+  updateUserRequest
+} from 'services/company/employee/accountSetup';
+import {
+  insertEmployeeProfessionalDetailRequest,
+  updateEmployeeProfessionalDetailRequest
+} from 'services/company/employee/professionalDetails';
+import {
+  insertEmployeeFamilyDetailRequest,
+  updateEmployeeFamilyDetailRequest
+} from 'services/company/employee/familyDetails';
+import {
+  insertEmployeeEmergencyContactDetailRequest,
+  updateEmployeeEmergencyContactDetailRequest
+} from 'services/company/employee/emergencyContactDetails';
+import {
+  insertEmployeeAddressDetailRequest,
+  updateEmployeeAddressDetailRequest
+} from 'services/company/employee/addressDetails';
+import {
+  insertEmployeeEducationalDetailRequest,
+  updateEmployeeEducationalDetailRequest
+} from 'services/company/employee/educationDetails';
+import {
+  insertEmployeeExperienceDetailRequest,
+  updateEmployeeExperienceDetailRequest
+} from 'services/company/employee/experienceDetails';
 import { AdminFormLayout } from 'components/CardLayout';
 import {
   AutoCompleteInput,
@@ -85,7 +113,11 @@ import { getRolesRequest } from 'services/company/role';
 /* Local Imports */
 
 import { getDate } from 'utility/formatDate';
+import { ALLOWED_FILE_FORMATS } from 'components/InputFields/upload/UploadSingleFile';
+import { DocumentModel } from 'models/company/DocumentType';
+import { getDocumentType } from 'services/company/employee/documentTypeDetails';
 import adminStyle from '../../company.style';
+import DocumentUploadStep from './DocumentUploadStep';
 
 /* Constants */
 const manageEmployeePath = PAGE_COMPANY_DASHBOARD.employees.absolutePath;
@@ -114,7 +146,14 @@ const CreateEmployee = (): JSX.Element => {
     Array<ShortDesignationModel>
   >([]);
   const [roles, setRoles] = useState<Array<RoleModel>>([]);
-  const [activeStep, setActiveStep] = useState(3);
+  const [documentTypes, setDocumentTypes] = useState<Array<DocumentModel>>([]);
+  const [activeStep, setActiveStep] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<{
+    [key: number]: boolean;
+  }>({});
+  const [savedStepData, setSavedStepData] = useState<{ [key: number]: any }>(
+    {}
+  );
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
 
@@ -160,6 +199,7 @@ const CreateEmployee = (): JSX.Element => {
     txtStreetName: '',
     txtLandmark: '',
     txtCity: '',
+    ddlCountry: '',
     ddlState: '',
     txtPincode: '',
     txtTelephoneNumber: '',
@@ -211,15 +251,21 @@ const CreateEmployee = (): JSX.Element => {
     txtSupervisorPhone: ''
   } as AddEmployeeExperienceDetailsFormValues;
 
-  const initialValues = {
+  const initialValuesDocumentDetailsEntries = {
+    documentTypeId: 0,
+    employeeDocument: ''
+  } as AddEmployeeDocumentsFormValues;
+
+  const initialValues: AddEmployeeDetailsFormValues = {
     ...initialValuesCreateUser,
     ...initialValuesPersonalDetails,
+    ...initialValuesProfessionalDetails,
     addressDetails: [initialValuesAddressDetailsEntries],
     familyDetails: [initialValuesFamilyDetailsEntries],
     educationDetails: [initialValuesEducationDetailsEntries],
     emergencyContactDetails: [initialValuesEmergencyContactDetailsEntries],
-    ...initialValuesProfessionalDetails,
-    experienceDetails: [initialValuesExperienceDetailsEntries]
+    experienceDetails: [initialValuesExperienceDetailsEntries],
+    documentDetails: [initialValuesDocumentDetailsEntries]
   };
   const isLastStep = activeStep === steps.length - 1;
 
@@ -282,300 +328,557 @@ const CreateEmployee = (): JSX.Element => {
   };
 
   /**
+   * function to get all the available document types with backend action
+   * @returns {void}
+   */
+  const handleGetDocumentTypes = async (): Promise<void> => {
+    setLoading(true);
+    try {
+      const response = await getDocumentType();
+      if (response && response.status.response_code === 200) {
+        setDocumentTypes(response.documentTypes);
+      } else {
+        showSnackbar(toastMessages.error.common, 'error');
+      }
+    } catch {
+      showSnackbar(toastMessages.error.common, 'error');
+    }
+  };
+
+  const isEqual = (obj1: any, obj2: any): boolean => {
+    // Handle null/undefined cases
+    if (obj1 === obj2) return true;
+    if (!obj1 || !obj2) return false;
+
+    // Normalize arrays (especially for roleIds)
+    if (Array.isArray(obj1) && Array.isArray(obj2)) {
+      if (obj1.length !== obj2.length) return false;
+      return obj1.every((item, index) => isEqual(item, obj2[index]));
+    }
+
+    // Handle object comparison
+    if (typeof obj1 === 'object' && typeof obj2 === 'object') {
+      const keys1 = Object.keys(obj1).filter((key) => obj1[key] !== undefined);
+      const keys2 = Object.keys(obj2).filter((key) => obj2[key] !== undefined);
+
+      // Check if object has prototype properties that need to be ignored
+      if (keys1.includes('[[Prototype]]') || keys2.includes('[[Prototype]]')) {
+        return true;
+      }
+
+      if (keys1.length !== keys2.length) return false;
+
+      return keys1.every((key) => {
+        // Special handling for roleIds
+        if (key === 'roleIds') {
+          const roles1 =
+            typeof obj1[key] === 'string' ? JSON.parse(obj1[key]) : obj1[key];
+          const roles2 =
+            typeof obj2[key] === 'string' ? JSON.parse(obj2[key]) : obj2[key];
+          return isEqual(roles1, roles2);
+        }
+        return isEqual(obj1[key], obj2[key]);
+      });
+    }
+
+    // Handle primitive values
+    return obj1 === obj2;
+  };
+
+  const getStepData = (
+    values: AddEmployeeDetailsFormValues,
+    step: number
+  ): any => {
+    switch (step) {
+      case 0:
+        return {
+          txtFirstName: values.txtFirstName,
+          txtLastName: values.txtLastName,
+          txtEmail: values.txtEmail,
+          txtPassword: values.txtPassword,
+          ddlRoles: values.ddlRoles,
+          chkIsActive: values.chkIsActive,
+          chkShowActivity: values.chkShowActivity
+        };
+      case 1:
+        return {
+          txtBirthDate: values.txtBirthDate,
+          txtAge: values.txtAge,
+          ddlBirthCountry: values.ddlBirthCountry,
+          ddlBirthState: values.ddlBirthState,
+          txtBirthLocation: values.txtBirthLocation,
+          ddlGender: values.ddlGender,
+          ddlMaritalStatus: values.ddlMaritalStatus,
+          txtMarriageDate: values.txtMarriageDate,
+          ddlBloodGroup: values.ddlBloodGroup,
+          txtPanNumber: values.txtPanNumber,
+          txtCaste: values.txtCaste,
+          txtReligion: values.txtReligion,
+          txtResidence: values.txtResidence
+        };
+      case 2:
+        return {
+          txtEmployeeCode: values.txtEmployeeCode,
+          ddlDesignation: values.ddlDesignation,
+          txtJoinDate: values.txtJoinDate,
+          ddlEmploymentType: values.ddlEmploymentType,
+          ddlWorkingType: values.ddlWorkingType
+        };
+      case 3:
+        return { addressDetails: values.addressDetails };
+      case 4:
+        return { familyDetails: values.familyDetails };
+      case 5:
+        return { educationDetails: values.educationDetails };
+      case 6:
+        return { emergencyContactDetails: values.emergencyContactDetails };
+      case 7:
+        return { experienceDetails: values.experienceDetails };
+      case 8:
+        return { documentDetails: values.documentDetails };
+      default:
+        return {};
+    }
+  };
+
+  // Helper function to normalize keys for comparison
+  const normalizeKeys = (obj: any): any => {
+    const normalized: any = {};
+
+    Object.keys(obj).forEach((key) => {
+      // Remove 'txt', 'ddl', 'chk' prefixes
+      let normalizedKey =
+        key
+          .replace(/^txt/, '')
+          .replace(/^ddl/, '')
+          .replace(/^chk/, '')
+          // Convert to camelCase if it isn't already
+          .charAt(0)
+          .toLowerCase() + key.slice(1);
+
+      // Special case for roleIds
+      if (normalizedKey === 'roles') normalizedKey = 'roleIds';
+
+      normalized[normalizedKey] = obj[key];
+    });
+
+    return normalized;
+  };
+
+  /**
    * Submit function to save Employee Details based on Details type with backend action
-   * @param {
-   * AddUserFormValues |
-   * AddEmployeePersonalDetailsFormValues |
-   * AddEmployeeProfessionalDetailsFormValues |
-   * AddEmployeeAddressDetailsFormValues |
-   * AddEmployeeFamilyDetailsFormValues |
-   * AddEmployeeEducationDetailsFormValues |
-   * AddEmployeeEmergencyContactDetailsFormValues |
-   * AddEmployeeExperienceDetailsFormValues} values - input values of form
+   * @param {AddEmployeeDetailsFormValues} values - input values of form
    * @param {object} {setSubmitting} - function to check submission
    * @return {void}
    */
 
   const handleFormSubmit = async (
-    values:
-      | AddUserFormValues
-      | AddEmployeePersonalDetailsFormValues
-      | AddEmployeeProfessionalDetailsFormValues
-      | AddEmployeeAddressDetailsFormValues[]
-      | AddEmployeeFamilyDetailsFormValues[]
-      | AddEmployeeEducationDetailsFormValues[]
-      | AddEmployeeEmergencyContactDetailsFormValues[]
-      | AddEmployeeExperienceDetailsFormValues[],
-    { setSubmitting }: any
+    values: AddEmployeeDetailsFormValues,
+    { setSubmitting }: FormikHelpers<AddEmployeeDetailsFormValues>
   ): Promise<void> => {
-    console.log('values are', values);
-    setActiveStep(activeStep + 1);
-    // try {
-    //   let response;
-    //   if (activeStep === 0) {
-    //     const requestDataUserForm: any = {
-    //       firstName: (values as AddUserFormValues).txtFirstName,
-    //       lastName: (values as AddUserFormValues).txtLastName,
-    //       email: (values as AddUserFormValues).txtEmail,
-    //       password: (values as AddUserFormValues).txtPassword,
-    //       phone: (values as AddUserFormValues).txtPhone,
-    //       roleIds: JSON.stringify((values as AddUserFormValues).ddlRoles),
-    //       isActive: (values as AddUserFormValues).chkIsActive,
-    //       showActivity: (values as AddUserFormValues).chkShowActivity
-    //     };
-    //     // requestDataUserForm.designationId = 3;
-    //     // requestDataUserForm.employeeCode = 'te-demo';
-    //     response = await registerUserRequest(requestDataUserForm);
-    //     if (response?.status.response_code === 200) {
-    //       setUserId(response?.id);
-    //       setActiveStep(activeStep + 1);
-    //       setSubmitting(false);
-    //       showSnackbar(
-    //         toastMessages.success.adminDashboard.userSaved,
-    //         'success'
-    //       );
-    //     }
-    //   } else if (activeStep === 1) {
-    //     const requestDataEmployeePersonalDetails: any = {
-    //       birthDate: (values as AddEmployeePersonalDetailsFormValues)
-    //         .txtBirthDate,
-    //       age: (values as AddEmployeePersonalDetailsFormValues).txtAge,
-    //       birthCountry: (values as AddEmployeePersonalDetailsFormValues)
-    //         .ddlBirthCountry,
-    //       birthState: (values as AddEmployeePersonalDetailsFormValues)
-    //         .ddlBirthState,
-    //       birthLocation: (values as AddEmployeePersonalDetailsFormValues)
-    //         .txtBirthLocation,
-    //       gender: (values as AddEmployeePersonalDetailsFormValues).ddlGender,
-    //       maritalStatus: (values as AddEmployeePersonalDetailsFormValues)
-    //         .ddlMaritalStatus,
-    //       bloodGroup: (values as AddEmployeePersonalDetailsFormValues)
-    //         .ddlBloodGroup,
-    //       panNumber: (values as AddEmployeePersonalDetailsFormValues)
-    //         .txtPanNumber,
-    //       caste: (values as AddEmployeePersonalDetailsFormValues).txtCaste,
-    //       religion: (values as AddEmployeePersonalDetailsFormValues)
-    //         .txtReligion,
-    //       residence: (values as AddEmployeePersonalDetailsFormValues)
-    //         .txtResidence
-    //     };
-    //     if (
-    //       (values as AddEmployeePersonalDetailsFormValues).ddlMaritalStatus !==
-    //       'single'
-    //     ) {
-    //       requestDataEmployeePersonalDetails.marriageDate = (
-    //         values as AddEmployeePersonalDetailsFormValues
-    //       ).txtMarriageDate;
-    //     }
-    //     requestDataEmployeePersonalDetails.userId = userId;
-    //     response = await insertEmployeePersonalDetailRequest(
-    //       requestDataEmployeePersonalDetails
-    //     );
-    //     console.log('response is', response);
-    //     if (response?.status.response_code === 200) {
-    //       console.log('userID is', userId);
-    //       setActiveStep(activeStep + 1);
-    //       setSubmitting(false);
-    //       showSnackbar(
-    //         toastMessages.success.adminDashboard.employee
-    //           .employeePersonalDetailsSaved,
-    //         'success'
-    //       );
-    //     }
-    //   } else if (activeStep === 2) {
-    //     const requestDataProfessionalDetails: any = {
-    //       employeeCode: (values as AddEmployeeProfessionalDetailsFormValues)
-    //         .txtEmployeeCode,
-    //       designationId: (values as AddEmployeeProfessionalDetailsFormValues)
-    //         .ddlDesignation,
-    //       joinDate: (values as AddEmployeeProfessionalDetailsFormValues)
-    //         .txtJoinDate,
-    //       employmentType: (values as AddEmployeeProfessionalDetailsFormValues)
-    //         .ddlEmploymentType,
-    //       workingType: (values as AddEmployeeProfessionalDetailsFormValues)
-    //         .ddlWorkingType
-    //     };
-    //     requestDataProfessionalDetails.userId = userId;
-    //     response = await insertEmployeeProfessionalDetailRequest(
-    //       requestDataProfessionalDetails
-    //     );
-    //     if (response?.status_response_code === 200) {
-    //       setActiveStep(activeStep + 1);
-    //       setSubmitting(false);
-    //       showSnackbar(
-    //         toastMessages.success.adminDashboard.employee
-    //           .employeeProfessionalDetailsSaved,
-    //         'success'
-    //       );
-    //     }
-    //   } else if (activeStep === 3) {
-    //     const familyValues = values as AddEmployeeFamilyDetailsFormValues[];
-    //     const requestDataFamilyDetails = familyValues.map((detail) => ({
-    //       relationType: detail.ddlRelationType,
-    //       name: detail.txtName,
-    //       age: detail.txtAge,
-    //       birthDate: detail.txtBirthDate,
-    //       currentAddress: detail.txtCurrentAddress,
-    //       birthCountry: detail.ddlBirthCountry,
-    //       birthState: detail.ddlBirthState,
-    //       birthLocation: detail.txtBirthLocation,
-    //       occupation: detail.txtOccupation,
-    //       phone: detail.txtPhone,
-    //       userId
-    //     }));
-    //     // const requestDataFamilyDetails: any = {
-    //     //   // relationType: (values as AddEmployeeFamilyDetailsFormValues[])
-    //     //   //   .ddlBirthState,
-    //     //   // name: (values as AddEmployeeFamilyDetailsFormValues).txtName,
-    //     //   // age: (values as AddEmployeeFamilyDetailsFormValues).txtAge,
-    //     //   // birthDate: (values as AddEmployeeFamilyDetailsFormValues)
-    //     //   //   .txtBirthDate,
-    //     //   // currentAddress: (values as AddEmployeeFamilyDetailsFormValues)
-    //     //   //   .txtCurrentAddress,
-    //     //   // birthCountry: (values as AddEmployeeFamilyDetailsFormValues)
-    //     //   //   .ddlBirthCountry,
-    //     //   // birthState: (values as AddEmployeeFamilyDetailsFormValues)
-    //     //   //   .ddlBirthState,
-    //     //   // birthLocation: (values as AddEmployeeFamilyDetailsFormValues)
-    //     //   //   .txtBirthLocation,
-    //     //   // occupation: (values as AddEmployeeFamilyDetailsFormValues)
-    //     //   //   .txtOccupation,
-    //     //   // phone: (values as AddEmployeeFamilyDetailsFormValues).txtPhone
-    //     // };
-    //     response = await insertEmployeeFamilyDetailRequest(
-    //       requestDataFamilyDetails
-    //     );
-    //     if (response?.status_response_code === 200) {
-    //       setActiveStep(activeStep + 1);
-    //       setSubmitting(false);
-    //       showSnackbar(
-    //         toastMessages.success.adminDashboard.employee
-    //           .employeeFamilyDetailsSaved,
-    //         'success'
-    //       );
-    //     }
-    //   } else if (activeStep === 5) {
-    //     const requestDataEmergencyContactDetails: any = {
-    //       contactName: (values as AddEmployeeEmergencyContactDetailsFormValues)
-    //         .txtContactName,
-    //       contactAddress: (
-    //         values as AddEmployeeEmergencyContactDetailsFormValues
-    //       ).txtContactAddress,
-    //       contactRelation: (
-    //         values as AddEmployeeEmergencyContactDetailsFormValues
-    //       ).ddlContactRelation,
-    //       phone: (values as AddEmployeeEmergencyContactDetailsFormValues)
-    //         .txtPhone
-    //     };
-    //     response = await insertEmployeeEmergencyContactDetailRequest(
-    //       requestDataEmergencyContactDetails
-    //     );
-    //     if (response?.status_response_code === 200) {
-    //       setActiveStep(activeStep + 1);
-    //       setSubmitting(false);
-    //       showSnackbar(
-    //         toastMessages.success.adminDashboard.employee
-    //           .employeeEmergencyContactsSaved,
-    //         'success'
-    //       );
-    //     }
-    //   } else if (activeStep === 2) {
-    //     const requestDataAddressDetails: any = {
-    //       addressType: (values as AddEmployeeAddressDetailsFormValues)
-    //         .ddlAddressType,
-    //       buildingName: (values as AddEmployeeAddressDetailsFormValues)
-    //         .txtBuildingName,
-    //       flatNumber: (values as AddEmployeeAddressDetailsFormValues)
-    //         .txtFlatNumber,
-    //       streetName: (values as AddEmployeeAddressDetailsFormValues)
-    //         .txtStreetName,
-    //       landmark: (values as AddEmployeeAddressDetailsFormValues).txtLandmark,
-    //       city: (values as AddEmployeeAddressDetailsFormValues).txtCity,
-    //       state: (values as AddEmployeeAddressDetailsFormValues).ddlState,
-    //       pincode: (values as AddEmployeeAddressDetailsFormValues).txtPincode,
-    //       telephoneNumber: (values as AddEmployeeAddressDetailsFormValues)
-    //         .txtTelephoneNumber,
-    //       phone: (values as AddEmployeeAddressDetailsFormValues).txtPhone
-    //     };
-    //     response = await insertEmployeeAddressDetailRequest(
-    //       requestDataAddressDetails
-    //     );
-    //     if (response?.status_response_code === 200) {
-    //       setActiveStep(activeStep + 1);
-    //       setSubmitting(false);
-    //       showSnackbar(
-    //         toastMessages.success.adminDashboard.employee
-    //           .employeeAddressDetailsSaved,
-    //         'success'
-    //       );
-    //     }
-    //   } else if (activeStep === 4) {
-    //     const requestDataEducationDetails: any = {
-    //       course: (values as AddEmployeeEducationDetailsFormValues).ddlCourse,
-    //       degreeSpecialization: (
-    //         values as AddEmployeeEducationDetailsFormValues
-    //       ).txtDegreeSpecialization,
-    //       instituteName: (values as AddEmployeeEducationDetailsFormValues)
-    //         .txtInstituteName,
-    //       fromDate: (values as AddEmployeeEducationDetailsFormValues)
-    //         .txtFromDate,
-    //       toDate: (values as AddEmployeeEducationDetailsFormValues).txtToDate,
-    //       status: (values as AddEmployeeEducationDetailsFormValues).ddlStatus,
-    //       studyMode: (values as AddEmployeeEducationDetailsFormValues)
-    //         .ddlStudyMode,
-    //       percentage: (values as AddEmployeeEducationDetailsFormValues)
-    //         .txtPercentage
-    //     };
-    //     response = await insertEmployeeEducationalDetailRequest(
-    //       requestDataEducationDetails
-    //     );
-    //     if (response?.status_response_code === 200) {
-    //       setActiveStep(activeStep + 1);
-    //       setSubmitting(false);
-    //       showSnackbar(
-    //         toastMessages.success.adminDashboard.employee
-    //           .employeeEducationDetailsSaved,
-    //         'success'
-    //       );
-    //     }
-    //   } else if (activeStep === 7) {
-    //     const requestDataExperienceDetails: any = {
-    //       companyName: (values as AddEmployeeExperienceDetailsFormValues)
-    //         .txtCompanyName,
-    //       employeeId: (values as AddEmployeeExperienceDetailsFormValues)
-    //         .txtEmployeeId,
-    //       jobTitle: (values as AddEmployeeExperienceDetailsFormValues)
-    //         .txtJobTitle,
-    //       startDate: (values as AddEmployeeExperienceDetailsFormValues)
-    //         .txtStartDate,
-    //       endDate: (values as AddEmployeeExperienceDetailsFormValues)
-    //         .txtEndDate,
-    //       country: (values as AddEmployeeExperienceDetailsFormValues)
-    //         .ddlCountry,
-    //       city: (values as AddEmployeeExperienceDetailsFormValues).txtCity,
-    //       state: (values as AddEmployeeExperienceDetailsFormValues).ddlState,
-    //       employmentType: (values as AddEmployeeExperienceDetailsFormValues)
-    //         .ddlEmploymentType,
-    //       supervisorName: (values as AddEmployeeExperienceDetailsFormValues)
-    //         .txtSupervisorName,
-    //       supervisorPhone: (values as AddEmployeeExperienceDetailsFormValues)
-    //         .txtSupervisorPhone
-    //     };
-    //     response = await insertEmployeeExperienceDetailRequest(
-    //       requestDataExperienceDetails
-    //     );
-    //     if (response?.status_response_code === 200) {
-    //       setSubmitting(false);
-    //       showSnackbar(
-    //         toastMessages.success.adminDashboard.employee
-    //           .employeeExperienceDetailsSaved,
-    //         'success'
-    //       );
-    //     }
-    //   }
-    // } catch (error) {
-    //   showSnackbar(toastMessages.error.common, 'error');
-    // }
+    try {
+      // const currentStepData = getStepData(values, activeStep);
+      // console.log('current step data before normalization:', currentStepData);
+
+      // const savedData = savedStepData[activeStep] || {};
+      // console.log('saved data before normalization:', savedData);
+
+      // // Normalize both objects for comparison
+      // const normalizedCurrentData = normalizeKeys(currentStepData);
+      // const normalizedSavedData = normalizeKeys(savedData);
+
+      // console.log('Normalized current data:', normalizedCurrentData);
+      // console.log('Normalized saved data:', normalizedSavedData);
+
+      // const hasChanges = !isEqual(normalizedCurrentData, normalizedSavedData);
+      // console.log('Has changes:', hasChanges);
+
+      // if (!hasChanges) {
+      //   console.log(
+      //     'No changes detected, moving to next step without API call'
+      //   );
+      //   setActiveStep((prevStep) => prevStep + 1);
+      //   setSubmitting(false);
+      //   return;
+      // }
+
+      let response;
+
+      if (activeStep === 0) {
+        const requestDataUserForm: any = {
+          firstName: values.txtFirstName,
+          lastName: values.txtLastName,
+          email: values.txtEmail,
+          password: values.txtPassword,
+          phone: values.txtPhone,
+          roleIds: JSON.stringify(values.ddlRoles),
+          isActive: values.chkIsActive,
+          showActivity: values.chkShowActivity
+        };
+
+        if (completedSteps[0]) {
+          response = await updateUserRequest(userId, requestDataUserForm);
+        } else {
+          response = await registerUserRequest(requestDataUserForm);
+        }
+
+        if (response?.status.response_code === 200) {
+          if (!completedSteps[0]) {
+            setUserId(response?.id);
+          }
+          setCompletedSteps((prev) => ({ ...prev, 0: true }));
+          setSavedStepData((prev) => ({ ...prev, 0: requestDataUserForm }));
+          setActiveStep(activeStep + 1);
+          setSubmitting(false);
+          showSnackbar(
+            completedSteps[0]
+              ? toastMessages.success.adminDashboard.userUpdated
+              : toastMessages.success.adminDashboard.userSaved,
+            'success'
+          );
+        } else if (response?.status.response_code === 205) {
+          showSnackbar(
+            toastMessages.error.adminDashboard.userDuplicate,
+            'error'
+          );
+        } else if (response?.status.response_code === 209) {
+          showSnackbar(
+            toastMessages.error.adminDashboard.companyUserExceed,
+            'error'
+          );
+        } else {
+          showSnackbar(toastMessages.error.common, 'error');
+        }
+      } else if (activeStep === 1) {
+        const requestDataEmployeePersonalDetails: any = {
+          birthDate: values.txtBirthDate,
+          age: values.txtAge,
+          birthCountry: values.ddlBirthCountry,
+          birthState: values.ddlBirthState,
+          birthLocation: values.txtBirthLocation,
+          gender: values.ddlGender,
+          maritalStatus: values.ddlMaritalStatus,
+          bloodGroup: values.ddlBloodGroup,
+          panNumber: values.txtPanNumber,
+          caste: values.txtCaste,
+          religion: values.txtReligion,
+          residence: values.txtResidence
+        };
+
+        if (values.ddlMaritalStatus !== 'single') {
+          requestDataEmployeePersonalDetails.marriageDate =
+            values.txtMarriageDate;
+        }
+
+        if (completedSteps[1]) {
+          response = await updateEmployeePersonalDetailRequest(
+            userId,
+            requestDataEmployeePersonalDetails
+          );
+        } else {
+          requestDataEmployeePersonalDetails.userId = userId;
+          response = await insertEmployeePersonalDetailRequest(
+            requestDataEmployeePersonalDetails
+          );
+        }
+
+        if (response?.status.response_code === 200) {
+          setCompletedSteps((prev) => ({ ...prev, 1: true }));
+          setSavedStepData((prev) => ({
+            ...prev,
+            1: requestDataEmployeePersonalDetails
+          }));
+          setActiveStep(activeStep + 1);
+          setSubmitting(false);
+          showSnackbar(
+            completedSteps[1]
+              ? toastMessages.success.adminDashboard.employee
+                  .employeePersonalDetailsUpdated
+              : toastMessages.success.adminDashboard.employee
+                  .employeePersonalDetailsSaved,
+            'success'
+          );
+        }
+      } else if (activeStep === 2) {
+        const requestDataProfessionalDetails: any = {
+          employeeCode: values.txtEmployeeCode,
+          designationId: values.ddlDesignation,
+          joinDate: values.txtJoinDate,
+          employmentType: values.ddlEmploymentType,
+          workingType: values.ddlWorkingType
+        };
+
+        if (completedSteps[2]) {
+          response = await updateEmployeeProfessionalDetailRequest(
+            userId,
+            requestDataProfessionalDetails
+          );
+        } else {
+          requestDataProfessionalDetails.userId = userId;
+          response = await insertEmployeeProfessionalDetailRequest(
+            requestDataProfessionalDetails
+          );
+        }
+
+        if (response?.status.response_code === 200) {
+          setCompletedSteps((prev) => ({ ...prev, 2: true }));
+          setSavedStepData((prev) => ({
+            ...prev,
+            2: requestDataProfessionalDetails
+          }));
+          setActiveStep(activeStep + 1);
+          setSubmitting(false);
+          showSnackbar(
+            completedSteps[2]
+              ? toastMessages.success.adminDashboard.employee
+                  .employeeProfessionalDetailsUpdated
+              : toastMessages.success.adminDashboard.employee
+                  .employeeProfessionalDetailsSaved,
+            'success'
+          );
+        }
+      } else if (activeStep === 4) {
+        const reqDataFamilyDetails: any = values.familyDetails.map(
+          (detail) => ({
+            relationType: detail.ddlRelationType,
+            name: detail.txtName,
+            age: detail.txtAge,
+            birthDate: detail.txtBirthDate,
+            currentAddress: detail.txtCurrentAddress,
+            birthCountry: detail.ddlBirthCountry,
+            birthState: detail.ddlBirthState,
+            birthLocation: detail.txtBirthLocation,
+            occupation: detail.txtOccupation,
+            phone: detail.txtPhone
+          })
+        );
+
+        if (completedSteps[4]) {
+          // For update, pass userId separately (without it in familyDetails objects)
+          response = await updateEmployeeFamilyDetailRequest(
+            userId,
+            reqDataFamilyDetails
+          );
+        } else {
+          // For insert, include userId in each family detail object
+          response = await insertEmployeeFamilyDetailRequest({
+            familyDetails: reqDataFamilyDetails.map((detail: any) => ({
+              ...detail,
+              userId
+            }))
+          });
+        }
+
+        if (response?.status.response_code === 200) {
+          setCompletedSteps((prev) => ({ ...prev, 4: true }));
+          setSavedStepData((prev) => ({
+            ...prev,
+            4: reqDataFamilyDetails
+          }));
+          setActiveStep(activeStep + 1);
+          setSubmitting(false);
+          showSnackbar(
+            completedSteps[4]
+              ? toastMessages.success.adminDashboard.employee
+                  .employeeFamilyDetailsUpdated
+              : toastMessages.success.adminDashboard.employee
+                  .employeeFamilyDetailsSaved,
+            'success'
+          );
+        }
+      } else if (activeStep === 5) {
+        const requestDataEducationDetails: any = values.educationDetails.map(
+          (detail) => ({
+            course: detail.ddlCourse,
+            degreeSpecialization: detail.txtDegreeSpecialization,
+            instituteName: detail.txtInstituteName,
+            fromDate: detail.txtFromDate,
+            toDate: detail.txtToDate,
+            status: detail.ddlStatus,
+            studyMode: detail.ddlStudyMode,
+            percentage: detail.txtPercentage
+          })
+        );
+
+        if (completedSteps[5]) {
+          response = await updateEmployeeEducationalDetailRequest(
+            userId,
+            requestDataEducationDetails
+          );
+        } else {
+          response = await insertEmployeeEducationalDetailRequest({
+            educationalDetails: requestDataEducationDetails.map(
+              (detail: any) => ({
+                ...detail,
+                userId
+              })
+            )
+          });
+        }
+
+        if (response?.status.response_code === 200) {
+          setCompletedSteps((prev) => ({ ...prev, 5: true }));
+          setSavedStepData((prev) => ({
+            ...prev,
+            5: requestDataEducationDetails
+          }));
+          setActiveStep(activeStep + 1);
+          setSubmitting(false);
+          showSnackbar(
+            completedSteps[5]
+              ? toastMessages.success.adminDashboard.employee
+                  .employeeEducationDetailsUpdated
+              : toastMessages.success.adminDashboard.employee
+                  .employeeEducationDetailsSaved,
+            'success'
+          );
+        }
+      } else if (activeStep === 6) {
+        const requestDataEmergencyContacts: any =
+          values.emergencyContactDetails.map((contact) => ({
+            contactName: contact.txtContactName,
+            contactAddress: contact.txtContactAddress,
+            contactRelation: contact.ddlContactRelation,
+            phone: contact.txtPhone
+          }));
+
+        if (completedSteps[6]) {
+          response = await updateEmployeeEmergencyContactDetailRequest(
+            userId,
+            requestDataEmergencyContacts
+          );
+        } else {
+          response = await insertEmployeeEmergencyContactDetailRequest({
+            emergencyContacts: requestDataEmergencyContacts.map(
+              (contact: any) => ({
+                ...contact,
+                userId
+              })
+            )
+          });
+        }
+
+        if (response?.status.response_code === 200) {
+          setCompletedSteps((prev) => ({ ...prev, 6: true }));
+          setSavedStepData((prev) => ({
+            ...prev,
+            6: requestDataEmergencyContacts
+          }));
+          setActiveStep(activeStep + 1);
+          setSubmitting(false);
+          showSnackbar(
+            completedSteps[6]
+              ? toastMessages.success.adminDashboard.employee
+                  .employeeEmergencyContactsUpdated
+              : toastMessages.success.adminDashboard.employee
+                  .employeeEmergencyContactsSaved,
+            'success'
+          );
+        }
+      } else if (activeStep === 7) {
+        const requestDataExperienceDetails: any = values.experienceDetails.map(
+          (detail) => ({
+            companyName: detail.txtCompanyName,
+            employeeId: detail.txtEmployeeId,
+            jobTitle: detail.txtJobTitle,
+            startDate: detail.txtStartDate,
+            endDate: detail.txtEndDate,
+            country: detail.ddlCountry,
+            city: detail.txtCity,
+            state: detail.ddlState,
+            employmentType: detail.ddlEmploymentType,
+            supervisorName: detail.txtSupervisorName,
+            supervisorPhone: detail.txtSupervisorPhone
+          })
+        );
+
+        if (completedSteps[7]) {
+          response = await updateEmployeeExperienceDetailRequest(
+            userId,
+            requestDataExperienceDetails
+          );
+        } else {
+          response = await insertEmployeeExperienceDetailRequest({
+            experienceDetails: requestDataExperienceDetails.map(
+              (experience: any) => ({
+                ...experience,
+                userId
+              })
+            )
+          });
+        }
+
+        if (response?.status.response_code === 200) {
+          setCompletedSteps((prev) => ({ ...prev, 7: true }));
+          setSavedStepData((prev) => ({
+            ...prev,
+            7: requestDataExperienceDetails
+          }));
+          setActiveStep(activeStep + 1);
+          setSubmitting(false);
+          showSnackbar(
+            completedSteps[7]
+              ? toastMessages.success.adminDashboard.employee
+                  .employeeExperienceDetailsUpdated
+              : toastMessages.success.adminDashboard.employee
+                  .employeeExperienceDetailsSaved,
+            'success'
+          );
+        }
+      } else if (activeStep === 3) {
+        const requestDataAddressDetails: any = values.addressDetails.map(
+          (detail) => ({
+            addressType: detail.ddlAddressType,
+            buildingName: detail.txtBuildingName,
+            flatNumber: detail.txtFlatNumber,
+            streetName: detail.txtStreetName,
+            landmark: detail.txtLandmark,
+            city: detail.txtCity,
+            state: detail.ddlState,
+            pincode: detail.txtPincode,
+            telephoneNumber: detail.txtTelephoneNumber,
+            phone: detail.txtPhone
+          })
+        );
+
+        if (completedSteps[3]) {
+          response = await updateEmployeeAddressDetailRequest(
+            userId,
+            requestDataAddressDetails
+          );
+        } else {
+          response = await insertEmployeeAddressDetailRequest({
+            employeeAddresses: requestDataAddressDetails.map(
+              (address: any) => ({
+                ...address,
+                userId
+              })
+            )
+          });
+        }
+
+        if (response?.status.response_code === 200) {
+          setCompletedSteps((prev) => ({ ...prev, 3: true }));
+          setSavedStepData((prev) => ({
+            ...prev,
+            3: requestDataAddressDetails
+          }));
+          setActiveStep(activeStep + 1);
+          setSubmitting(false);
+          showSnackbar(
+            completedSteps[3]
+              ? toastMessages.success.adminDashboard.employee
+                  .employeeAddressDetailsUpdated
+              : toastMessages.success.adminDashboard.employee
+                  .employeeAddressDetailsSaved,
+            'success'
+          );
+        }
+      }
+    } catch (error) {
+      showSnackbar(toastMessages.error.common, 'error');
+      setSubmitting(false);
+    }
   };
 
   const validationSchema = [
@@ -664,7 +967,7 @@ const CreateEmployee = (): JSX.Element => {
 
     // Address Details Validation (Multiple)
     Yup.object().shape({
-      addressDetailsEntries: Yup.array()
+      addressDetails: Yup.array()
         .of(
           Yup.object().shape({
             ddlAddressType: Yup.string().required(
@@ -679,16 +982,19 @@ const CreateEmployee = (): JSX.Element => {
             txtStreetName: Yup.string().required(
               'Please enter the street name.'
             ),
-            txtLandmark: Yup.string(),
+            txtLandmark: Yup.string().required('Please enter the landmark'),
             txtCity: Yup.string().required('Please enter the city.'),
+            ddlCountry: Yup.string().required('Please select the country.'),
             ddlState: Yup.string().required('Please select the state.'),
-            txtPinCode: Yup.string()
+            txtPincode: Yup.string()
               .matches(/^[0-9]{6}$/, 'Please enter a valid 6-digit pincode.')
               .required('Please enter the pincode.'),
-            txtTelephoneNumber: Yup.string().matches(
-              /^[0-9]{10}$/,
-              'Please enter a valid 10-digit telephone number.'
-            ),
+            txtTelephoneNumber: Yup.string()
+              .matches(
+                /^[0-9]{10}$/,
+                'Please enter a valid 10-digit telephone number.'
+              )
+              .required('Please enter the Telephone number.'),
             txtPhone: Yup.string()
               .matches(
                 /^[0-9]{10}$/,
@@ -702,7 +1008,7 @@ const CreateEmployee = (): JSX.Element => {
 
     // Family Details Validation (Multiple)
     Yup.object().shape({
-      familyDetailsEntries: Yup.array()
+      familyDetails: Yup.array()
         .of(
           Yup.object().shape({
             ddlRelationType: Yup.string().required(
@@ -745,7 +1051,7 @@ const CreateEmployee = (): JSX.Element => {
 
     // Education Details Validation (Multiple)
     Yup.object().shape({
-      educationDetailsEntries: Yup.array()
+      educationDetails: Yup.array()
         .of(
           Yup.object().shape({
             ddlCourse: Yup.string().required('Please select the course.'),
@@ -776,7 +1082,7 @@ const CreateEmployee = (): JSX.Element => {
 
     // Emergency Contact Details Validation (Multiple)
     Yup.object().shape({
-      emergencyContactDetailsEntries: Yup.array()
+      emergencyContactDetails: Yup.array()
         .of(
           Yup.object().shape({
             txtContactName: Yup.string()
@@ -801,7 +1107,7 @@ const CreateEmployee = (): JSX.Element => {
 
     // Experience Details Validation (Multiple)
     Yup.object().shape({
-      experienceDetailsEntries: Yup.array()
+      experienceDetails: Yup.array()
         .of(
           Yup.object().shape({
             txtCompanyName: Yup.string().required(
@@ -838,14 +1144,105 @@ const CreateEmployee = (): JSX.Element => {
           })
         )
         .min(1, 'Please add at least one experience record.')
+    }),
+
+    Yup.object().shape({
+      documentDetails: Yup.array().of(
+        Yup.object().shape({
+          documentTypeId: Yup.number().required('Document type is required'),
+          employeeDocument: Yup.mixed()
+            .required('Document is required')
+            .test('fileSize', 'File size must be less than 1MB', (value) => {
+              if (!value) return true; // Skip validation if no file is provided
+              const file = value as File; // Explicitly cast to File
+              return file.size <= 1000000;
+            })
+            .test(
+              'fileType',
+              'File type must be PDF, JPEG, JPG, or PNG',
+              (value) => {
+                if (!value) return true; // Skip validation if no file is provided
+                const file = value as File; // Explicitly cast to File
+                return ALLOWED_FILE_FORMATS.includes(file.type);
+              }
+            )
+        })
+      )
     })
   ];
   const currentValidationSchema = validationSchema[activeStep];
 
+  const CustomConnector = styled(StepConnector)(({ theme }) => ({
+    // Media query for md breakpoint
+    [`&.${theme.breakpoints.up('md')}`]: {
+      top: 10,
+      left: 'calc(-50% + 16px)',
+      right: 'calc(50% + 16px)'
+    },
+
+    // Alternative label styles
+    [`&.${stepConnectorClasses.alternativeLabel}`]: {
+      top: 22,
+      left: 'calc(-50% + 16px)',
+      right: 'calc(50% + 16px)'
+    },
+
+    // Active state
+    [`&.${stepConnectorClasses.active}`]: {
+      [`& .${stepConnectorClasses.line}`]: {
+        borderColor: theme.palette.primary.main,
+        borderWidth: 2
+      }
+    },
+
+    // Completed state
+    [`&.${stepConnectorClasses.completed}`]: {
+      [`& .${stepConnectorClasses.line}`]: {
+        borderColor: theme.palette.primary.main
+      }
+    },
+
+    // Line styles
+    [`& .${stepConnectorClasses.line}`]: {
+      borderColor:
+        theme.palette.mode === 'dark' ? theme.palette.grey[800] : '#eaeaf0',
+      borderTopWidth: 2,
+      borderRadius: 4,
+      transition: 'all 0.3s ease'
+    }
+  }));
+
+  const CustomStepLabel = styled(StepLabel)(({ theme }) => ({
+    flexDirection: 'column',
+    '& .MuiStepLabel-iconContainer': {
+      paddingRight: 0,
+      marginBottom: 4
+    },
+    '& .MuiStepLabel-label': {
+      marginTop: 4,
+      fontSize: '0.75rem',
+      textAlign: 'center',
+      maxWidth: '70px',
+      wordWrap: 'break-word',
+      [theme.breakpoints.down('sm')]: {
+        fontSize: '0.7rem',
+        maxWidth: '60px'
+      },
+      '&.Mui-active': {
+        color: theme.palette.primary.main,
+        fontWeight: 600,
+        transform: 'scale(1.05)',
+        transition: 'all 0.3s ease'
+      }
+    }
+  }));
+
   useEffect(() => {
     handleGetRoles();
     handleGetDesignations();
+    handleGetDocumentTypes();
   }, []);
+
   return (
     <Box sx={{ width: '100%' }}>
       <>
@@ -857,7 +1254,7 @@ const CreateEmployee = (): JSX.Element => {
             >
               <>
                 <Formik
-                  enableReinitialize
+                  enableReinitialize={false}
                   initialValues={initialValues}
                   validationSchema={currentValidationSchema}
                   onSubmit={handleFormSubmit}
@@ -871,2511 +1268,1452 @@ const CreateEmployee = (): JSX.Element => {
                     touched,
                     values,
                     setFieldValue
-                  }) => (
-                    <>
-                      <Form autoComplete="off" onSubmit={handleSubmit}>
-                        <Box sx={{ overflowX: 'auto', width: '100%' }}>
-                          <Stepper
-                            activeStep={activeStep}
-                            connector={<StepConnector />}
-                            sx={{
-                              mt: 2,
-                              p: 2,
-                              minWidth: 'max-content'
-                            }}
-                          >
-                            {steps.map((label) => {
-                              const stepProps: { completed?: boolean } = {};
-                              const labelProps: {
-                                optional?: React.ReactNode;
-                              } = {};
-                              return (
-                                <Step key={label} {...stepProps}>
-                                  <StepLabel {...labelProps}>{label}</StepLabel>
+                  }) => {
+                    const handleEmployeeSubmit = (): void => {
+                      const allDocumentsUploaded = documentTypes.every(
+                        (docType) =>
+                          values.documentDetails.some(
+                            (doc) =>
+                              doc.documentTypeId === docType.id &&
+                              doc.employeeDocument
+                          )
+                      );
+
+                      if (!allDocumentsUploaded) {
+                        showSnackbar(
+                          'Please upload all required documents before submitting.',
+                          'error'
+                        );
+                        return;
+                      }
+
+                      showSnackbar(
+                        toastMessages.success.adminDashboard.employee
+                          .employeeOnboard,
+                        'success'
+                      );
+                      navigate(manageEmployeePath);
+                    };
+                    return (
+                      <>
+                        <Form autoComplete="off" onSubmit={handleSubmit}>
+                          <Box sx={{ width: '100%', overflowX: 'auto' }}>
+                            <Stepper
+                              activeStep={activeStep}
+                              alternativeLabel
+                              connector={<CustomConnector />}
+                              sx={{
+                                mt: 2,
+                                p: 1,
+                                '& .MuiStep-root': {
+                                  padding: '0 8px'
+                                }
+                              }}
+                            >
+                              {steps.map((label) => (
+                                <Step key={label}>
+                                  <CustomStepLabel>{label}</CustomStepLabel>
                                 </Step>
-                              );
-                            })}
-                          </Stepper>
-                        </Box>
-                        {activeStep === 0 && (
-                          <CardContent>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="First Name"
-                                  name="txtFirstName"
-                                  value={values.txtFirstName}
-                                  inputProps={{ maxLength: 50 }}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtFirstName && errors.txtFirstName
-                                  )}
-                                  helperText={String(
-                                    touched.txtFirstName && errors.txtFirstName
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Last Name"
-                                  name="txtLastName"
-                                  value={values.txtLastName}
-                                  inputProps={{ maxLength: 50 }}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtLastName && errors.txtLastName
-                                  )}
-                                  helperText={String(
-                                    touched.txtLastName && errors.txtLastName
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Email"
-                                  name="txtEmail"
-                                  type="email"
-                                  value={values.txtEmail}
-                                  inputProps={{ maxLength: 100 }}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtEmail && errors.txtEmail
-                                  )}
-                                  helperText={String(
-                                    touched.txtEmail && errors.txtEmail
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Password"
-                                  name="txtPassword"
-                                  type="password"
-                                  value={values.txtPassword}
-                                  inputProps={{ maxLength: 100 }}
-                                  onBlur={handleBlur}
-                                  onChange={handleChange}
-                                  error={Boolean(
-                                    touched.txtPassword && errors.txtPassword
-                                  )}
-                                  helperText={String(
-                                    touched.txtPassword && errors.txtPassword
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <AutoCompleteInput
-                                  multiple
-                                  label="Select Role"
-                                  name="ddlRoles"
-                                  value={values.ddlRoles}
-                                  data={
-                                    roles?.map(
-                                      (val: ShortRoleModel) => val.id
-                                    ) || []
-                                  }
-                                  originalData={roles}
-                                  itemId="id"
-                                  itemName="name"
-                                  placeholder="search role"
-                                  limitTags={2}
-                                  renderOption={(
-                                    props: any,
-                                    option: any,
-                                    { selected }: any
-                                  ) => (
-                                    <MenuItem {...props}>
-                                      <Checkbox checked={selected} />
-                                      {roles?.find(
-                                        (val: ShortRoleModel) =>
-                                          val.id === option
-                                      )?.name || ''}
-                                    </MenuItem>
-                                  )}
-                                  onChange={(e: any) => {
-                                    setFieldValue('ddlRoles', e);
-                                  }}
-                                  error={Boolean(
-                                    touched.ddlRoles && errors.ddlRoles
-                                  )}
-                                  helperText={String(
-                                    touched.ddlRoles && errors.ddlRoles
-                                  )}
-                                />
-                              </Grid>
-                              <Grid
-                                item
-                                xs={12}
-                                sm={6}
-                                md={6}
-                                sx={{ paddingTop: '52px !important' }}
-                              >
-                                <FormControlLabel
-                                  control={
-                                    <Switch
-                                      name="chkIsActive"
-                                      checked={values.chkIsActive}
-                                      onChange={handleChange}
-                                      onBlur={handleBlur}
-                                    />
-                                  }
-                                  label={
-                                    <Typography variant="body2" ml={2}>
-                                      Is Active
-                                    </Typography>
-                                  }
-                                  sx={adminStyle.formControlLabel}
-                                />
-                                <FormControlLabel
-                                  control={
-                                    <Switch
-                                      name="chkShowActivity"
-                                      checked={values.chkShowActivity}
-                                      onChange={handleChange}
-                                      onBlur={handleBlur}
-                                    />
-                                  }
-                                  label={
-                                    <Typography variant="body2" ml={2}>
-                                      Show Activity
-                                    </Typography>
-                                  }
-                                  sx={adminStyle.formControlLabel}
-                                />
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        )}
-                        {activeStep === 1 && (
-                          <CardContent>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <LocalizationProvider
-                                  dateAdapter={AdapterDayjs}
-                                >
-                                  <DatePicker
-                                    openTo="day"
-                                    inputFormat="DD/MM/YYYY"
-                                    value={values.txtBirthDate}
-                                    onChange={(newValue: any) => {
-                                      setFieldValue(
-                                        'txtBirthDate',
-                                        getDate(newValue, 'dd MMM yyyy')
-                                      );
+                              ))}
+                            </Stepper>
+                          </Box>
+                          {activeStep === 0 && (
+                            <CardContent>
+                              <Grid container spacing={2}>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="First Name"
+                                    name="txtFirstName"
+                                    value={values.txtFirstName}
+                                    inputProps={{ maxLength: 50 }}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.txtFirstName &&
+                                        errors.txtFirstName
+                                    )}
+                                    helperText={String(
+                                      touched.txtFirstName &&
+                                        errors.txtFirstName
+                                    )}
+                                  />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="Last Name"
+                                    name="txtLastName"
+                                    value={values.txtLastName}
+                                    inputProps={{ maxLength: 50 }}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.txtLastName && errors.txtLastName
+                                    )}
+                                    helperText={String(
+                                      touched.txtLastName && errors.txtLastName
+                                    )}
+                                  />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="Email"
+                                    name="txtEmail"
+                                    type="email"
+                                    value={values.txtEmail}
+                                    inputProps={{ maxLength: 100 }}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.txtEmail && errors.txtEmail
+                                    )}
+                                    helperText={String(
+                                      touched.txtEmail && errors.txtEmail
+                                    )}
+                                  />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="Password"
+                                    name="txtPassword"
+                                    type="password"
+                                    value={values.txtPassword}
+                                    inputProps={{ maxLength: 100 }}
+                                    onBlur={handleBlur}
+                                    onChange={handleChange}
+                                    error={Boolean(
+                                      touched.txtPassword && errors.txtPassword
+                                    )}
+                                    helperText={String(
+                                      touched.txtPassword && errors.txtPassword
+                                    )}
+                                  />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <AutoCompleteInput
+                                    multiple
+                                    label="Select Role"
+                                    name="ddlRoles"
+                                    value={values.ddlRoles}
+                                    data={
+                                      roles?.map(
+                                        (val: ShortRoleModel) => val.id
+                                      ) || []
+                                    }
+                                    originalData={roles}
+                                    itemId="id"
+                                    itemName="name"
+                                    placeholder="search role"
+                                    limitTags={2}
+                                    renderOption={(
+                                      props: any,
+                                      option: any,
+                                      { selected }: any
+                                    ) => (
+                                      <MenuItem {...props}>
+                                        <Checkbox checked={selected} />
+                                        {roles?.find(
+                                          (val: ShortRoleModel) =>
+                                            val.id === option
+                                        )?.name || ''}
+                                      </MenuItem>
+                                    )}
+                                    onChange={(e: any) => {
+                                      setFieldValue('ddlRoles', e);
                                     }}
-                                    renderInput={(params: any) => (
-                                      <CustomField
-                                        name="txtBirthDate"
-                                        label="Birth Date"
-                                        error={Boolean(
-                                          touched.txtBirthDate &&
-                                            errors.txtBirthDate
-                                        )}
-                                        helperText={String(
-                                          touched.txtBirthDate &&
-                                            errors.txtBirthDate
-                                        )}
-                                      >
-                                        <TextField
-                                          {...params}
-                                          fullWidth
-                                          size="medium"
+                                    error={Boolean(
+                                      touched.ddlRoles && errors.ddlRoles
+                                    )}
+                                    helperText={String(
+                                      touched.ddlRoles && errors.ddlRoles
+                                    )}
+                                  />
+                                </Grid>
+                                <Grid
+                                  item
+                                  xs={12}
+                                  sm={6}
+                                  md={6}
+                                  sx={{ paddingTop: '52px !important' }}
+                                >
+                                  <FormControlLabel
+                                    control={
+                                      <Switch
+                                        name="chkIsActive"
+                                        checked={values.chkIsActive}
+                                        onChange={handleChange}
+                                        onBlur={handleBlur}
+                                      />
+                                    }
+                                    label={
+                                      <Typography variant="body2" ml={2}>
+                                        Is Active
+                                      </Typography>
+                                    }
+                                    sx={adminStyle.formControlLabel}
+                                  />
+                                  <FormControlLabel
+                                    control={
+                                      <Switch
+                                        name="chkShowActivity"
+                                        checked={values.chkShowActivity}
+                                        onChange={handleChange}
+                                        onBlur={handleBlur}
+                                      />
+                                    }
+                                    label={
+                                      <Typography variant="body2" ml={2}>
+                                        Show Activity
+                                      </Typography>
+                                    }
+                                    sx={adminStyle.formControlLabel}
+                                  />
+                                </Grid>
+                              </Grid>
+                            </CardContent>
+                          )}
+                          {activeStep === 1 && (
+                            <CardContent>
+                              <Grid container spacing={2}>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <LocalizationProvider
+                                    dateAdapter={AdapterDayjs}
+                                  >
+                                    <DatePicker
+                                      openTo="day"
+                                      inputFormat="DD/MM/YYYY"
+                                      value={values.txtBirthDate}
+                                      onChange={(newValue: any) => {
+                                        setFieldValue(
+                                          'txtBirthDate',
+                                          getDate(newValue, 'dd MMM yyyy')
+                                        );
+                                      }}
+                                      renderInput={(params: any) => (
+                                        <CustomField
                                           name="txtBirthDate"
-                                          value={values.txtBirthDate}
+                                          label="Birth Date"
                                           error={Boolean(
                                             touched.txtBirthDate &&
                                               errors.txtBirthDate
                                           )}
-                                        />
-                                      </CustomField>
+                                          helperText={String(
+                                            touched.txtBirthDate &&
+                                              errors.txtBirthDate
+                                          )}
+                                        >
+                                          <TextField
+                                            {...params}
+                                            fullWidth
+                                            size="medium"
+                                            name="txtBirthDate"
+                                            value={values.txtBirthDate}
+                                            error={Boolean(
+                                              touched.txtBirthDate &&
+                                                errors.txtBirthDate
+                                            )}
+                                          />
+                                        </CustomField>
+                                      )}
+                                    />
+                                  </LocalizationProvider>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="Age"
+                                    name="txtAge"
+                                    type="number"
+                                    value={values.txtAge}
+                                    inputProps={{ min: 1 }}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.txtAge && errors.txtAge
+                                    )}
+                                    helperText={String(
+                                      touched.txtAge && errors.txtAge
                                     )}
                                   />
-                                </LocalizationProvider>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Age"
-                                  name="txtAge"
-                                  type="number"
-                                  value={values.txtAge}
-                                  inputProps={{ min: 1 }}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtAge && errors.txtAge
-                                  )}
-                                  helperText={String(
-                                    touched.txtAge && errors.txtAge
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select Birth Country"
-                                  name="ddlBirthCountry"
-                                  value={values.ddlBirthCountry}
-                                  onChange={(e) => {
-                                    handleChange(e);
-                                    handleCountryChange(
-                                      e.target.value as string
-                                    );
-                                  }}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlBirthCountry &&
-                                      errors.ddlBirthCountry
-                                  )}
-                                  helperText={String(
-                                    touched.ddlBirthCountry &&
-                                      errors.ddlBirthCountry
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {countries.map((option, i) => (
-                                    <MenuItem key={i} value={option.alpha2Code}>
-                                      {option.country}
-                                    </MenuItem>
-                                  ))}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select State"
-                                  name="ddlBirthState"
-                                  value={values.ddlBirthState}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlBirthState &&
-                                      errors.ddlBirthState
-                                  )}
-                                  helperText={String(
-                                    touched.ddlBirthState &&
-                                      errors.ddlBirthState
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {states.map((option, i) => (
-                                    <MenuItem key={i} value={option}>
-                                      {option}
-                                    </MenuItem>
-                                  ))}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Birth Location"
-                                  name="txtBirthLocation"
-                                  value={values.txtBirthLocation}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtBirthLocation &&
-                                      errors.txtBirthLocation
-                                  )}
-                                  helperText={String(
-                                    touched.txtBirthLocation &&
-                                      errors.txtBirthLocation
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select Gender"
-                                  name="ddlGender"
-                                  value={values.ddlGender}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlGender && errors.ddlGender
-                                  )}
-                                  helperText={String(
-                                    touched.ddlGender && errors.ddlGender
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeePersonalDetails.gender.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select Marital Status"
-                                  name="ddlMaritalStatus"
-                                  value={values.ddlMaritalStatus}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlMaritalStatus &&
-                                      errors.ddlMaritalStatus
-                                  )}
-                                  helperText={String(
-                                    touched.ddlMaritalStatus &&
-                                      errors.ddlMaritalStatus
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeePersonalDetails.maritalStatus.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <LocalizationProvider
-                                  dateAdapter={AdapterDayjs}
-                                >
-                                  <DatePicker
-                                    openTo="day"
-                                    inputFormat="DD/MM/YYYY"
-                                    value={values.txtMarriageDate}
-                                    disabled={
-                                      values.ddlMaritalStatus === 'single'
-                                    }
-                                    onChange={(newValue: any) => {
-                                      setFieldValue(
-                                        'txtMarriageDate',
-                                        newValue
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <SelectInput
+                                    label="Select Birth Country"
+                                    name="ddlBirthCountry"
+                                    value={values.ddlBirthCountry}
+                                    onChange={(e) => {
+                                      handleChange(e);
+                                      handleCountryChange(
+                                        e.target.value as string
                                       );
                                     }}
-                                    renderInput={(params: any) => (
-                                      <CustomField
-                                        name="txtMarriageDate"
-                                        label="Marriage Date"
-                                        error={Boolean(
-                                          touched.txtMarriageDate &&
-                                            errors.txtMarriageDate
-                                        )}
-                                        helperText={String(
-                                          touched.txtMarriageDate &&
-                                            errors.txtMarriageDate
-                                        )}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.ddlBirthCountry &&
+                                        errors.ddlBirthCountry
+                                    )}
+                                    helperText={String(
+                                      touched.ddlBirthCountry &&
+                                        errors.ddlBirthCountry
+                                    )}
+                                  >
+                                    <MenuItem key="-1" value="">
+                                      - None -
+                                    </MenuItem>
+                                    {countries.map((option, i) => (
+                                      <MenuItem
+                                        key={i}
+                                        value={option.alpha2Code}
                                       >
-                                        <TextField
-                                          {...params}
-                                          fullWidth
-                                          size="medium"
+                                        {option.country}
+                                      </MenuItem>
+                                    ))}
+                                  </SelectInput>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <SelectInput
+                                    label="Select Birth State"
+                                    name="ddlBirthState"
+                                    value={values.ddlBirthState}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.ddlBirthState &&
+                                        errors.ddlBirthState
+                                    )}
+                                    helperText={String(
+                                      touched.ddlBirthState &&
+                                        errors.ddlBirthState
+                                    )}
+                                  >
+                                    <MenuItem key="-1" value="">
+                                      - None -
+                                    </MenuItem>
+                                    {states.map((option, i) => (
+                                      <MenuItem key={i} value={option}>
+                                        {option}
+                                      </MenuItem>
+                                    ))}
+                                  </SelectInput>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="Birth Location"
+                                    name="txtBirthLocation"
+                                    value={values.txtBirthLocation}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.txtBirthLocation &&
+                                        errors.txtBirthLocation
+                                    )}
+                                    helperText={String(
+                                      touched.txtBirthLocation &&
+                                        errors.txtBirthLocation
+                                    )}
+                                  />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <SelectInput
+                                    label="Select Gender"
+                                    name="ddlGender"
+                                    value={values.ddlGender}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.ddlGender && errors.ddlGender
+                                    )}
+                                    helperText={String(
+                                      touched.ddlGender && errors.ddlGender
+                                    )}
+                                  >
+                                    <MenuItem key="-1" value="">
+                                      - None -
+                                    </MenuItem>
+                                    {employeePersonalDetails.gender.map(
+                                      (option: any) => (
+                                        <MenuItem
+                                          key={option.id}
+                                          value={option.value}
+                                        >
+                                          {option.name}
+                                        </MenuItem>
+                                      )
+                                    )}
+                                  </SelectInput>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <SelectInput
+                                    label="Select Marital Status"
+                                    name="ddlMaritalStatus"
+                                    value={values.ddlMaritalStatus}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.ddlMaritalStatus &&
+                                        errors.ddlMaritalStatus
+                                    )}
+                                    helperText={String(
+                                      touched.ddlMaritalStatus &&
+                                        errors.ddlMaritalStatus
+                                    )}
+                                  >
+                                    <MenuItem key="-1" value="">
+                                      - None -
+                                    </MenuItem>
+                                    {employeePersonalDetails.maritalStatus.map(
+                                      (option: any) => (
+                                        <MenuItem
+                                          key={option.id}
+                                          value={option.value}
+                                        >
+                                          {option.name}
+                                        </MenuItem>
+                                      )
+                                    )}
+                                  </SelectInput>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <LocalizationProvider
+                                    dateAdapter={AdapterDayjs}
+                                  >
+                                    <DatePicker
+                                      openTo="day"
+                                      inputFormat="DD/MM/YYYY"
+                                      value={values.txtMarriageDate}
+                                      disabled={
+                                        values.ddlMaritalStatus === 'single'
+                                      }
+                                      onChange={(newValue: any) => {
+                                        setFieldValue(
+                                          'txtMarriageDate',
+                                          newValue
+                                        );
+                                      }}
+                                      renderInput={(params: any) => (
+                                        <CustomField
                                           name="txtMarriageDate"
-                                          value={values.txtMarriageDate}
+                                          label="Marriage Date"
                                           error={Boolean(
                                             touched.txtMarriageDate &&
                                               errors.txtMarriageDate
                                           )}
-                                        />
-                                      </CustomField>
+                                          helperText={String(
+                                            touched.txtMarriageDate &&
+                                              errors.txtMarriageDate
+                                          )}
+                                        >
+                                          <TextField
+                                            {...params}
+                                            fullWidth
+                                            size="medium"
+                                            name="txtMarriageDate"
+                                            value={values.txtMarriageDate}
+                                            error={Boolean(
+                                              touched.txtMarriageDate &&
+                                                errors.txtMarriageDate
+                                            )}
+                                          />
+                                        </CustomField>
+                                      )}
+                                    />
+                                  </LocalizationProvider>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <SelectInput
+                                    label="Select Blood Group"
+                                    name="ddlBloodGroup"
+                                    value={values.ddlBloodGroup}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.ddlBloodGroup &&
+                                        errors.ddlBloodGroup
+                                    )}
+                                    helperText={String(
+                                      touched.ddlBloodGroup &&
+                                        errors.ddlBloodGroup
+                                    )}
+                                  >
+                                    <MenuItem key="-1" value="">
+                                      - None -
+                                    </MenuItem>
+                                    {employeePersonalDetails.bloodGroups.map(
+                                      (option: any) => (
+                                        <MenuItem
+                                          key={option.id}
+                                          value={option.value}
+                                        >
+                                          {option.name}
+                                        </MenuItem>
+                                      )
+                                    )}
+                                  </SelectInput>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="Pan Number"
+                                    name="txtPanNumber"
+                                    value={values.txtPanNumber}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.txtPanNumber &&
+                                        errors.txtPanNumber
+                                    )}
+                                    helperText={String(
+                                      touched.txtPanNumber &&
+                                        errors.txtPanNumber
                                     )}
                                   />
-                                </LocalizationProvider>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="Caste"
+                                    name="txtCaste"
+                                    value={values.txtCaste}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.txtCaste && errors.txtCaste
+                                    )}
+                                    helperText={String(
+                                      touched.txtCaste && errors.txtCaste
+                                    )}
+                                  />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="Religion"
+                                    name="txtReligion"
+                                    value={values.txtReligion}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.txtReligion && errors.txtReligion
+                                    )}
+                                    helperText={String(
+                                      touched.txtReligion && errors.txtReligion
+                                    )}
+                                  />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="Residence"
+                                    name="txtResidence"
+                                    value={values.txtResidence}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.txtResidence &&
+                                        errors.txtResidence
+                                    )}
+                                    helperText={String(
+                                      touched.txtResidence &&
+                                        errors.txtResidence
+                                    )}
+                                  />
+                                </Grid>
                               </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select Blood Group"
-                                  name="ddlBloodGroup"
-                                  value={values.ddlBloodGroup}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlBloodGroup &&
-                                      errors.ddlBloodGroup
-                                  )}
-                                  helperText={String(
-                                    touched.ddlBloodGroup &&
-                                      errors.ddlBloodGroup
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeePersonalDetails.bloodGroups.map(
-                                    (option: any) => (
+                            </CardContent>
+                          )}
+                          {activeStep === 2 && (
+                            <CardContent>
+                              <Grid container spacing={2}>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <TextInput
+                                    fullWidth
+                                    label="Employee Code"
+                                    name="txtEmployeeCode"
+                                    value={values.txtEmployeeCode}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.txtEmployeeCode &&
+                                        errors.txtEmployeeCode
+                                    )}
+                                    helperText={String(
+                                      touched.txtEmployeeCode &&
+                                        errors.txtEmployeeCode
+                                    )}
+                                  />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <SelectInput
+                                    label="Select Designation"
+                                    name="ddlDesignation"
+                                    value={values.ddlDesignation}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.ddlDesignation &&
+                                        errors.ddlDesignation
+                                    )}
+                                    helperText={String(
+                                      touched.ddlDesignation &&
+                                        errors.ddlDesignation
+                                    )}
+                                  >
+                                    <MenuItem key="-1" value="">
+                                      - None -
+                                    </MenuItem>
+                                    {designations.map((option: any) => (
                                       <MenuItem
                                         key={option.id}
-                                        value={option.value}
+                                        value={option.id}
                                       >
                                         {option.name}
                                       </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Pan Number"
-                                  name="txtPanNumber"
-                                  value={values.txtPanNumber}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtPanNumber && errors.txtPanNumber
-                                  )}
-                                  helperText={String(
-                                    touched.txtPanNumber && errors.txtPanNumber
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Caste"
-                                  name="txtCaste"
-                                  value={values.txtCaste}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtCaste && errors.txtCaste
-                                  )}
-                                  helperText={String(
-                                    touched.txtCaste && errors.txtCaste
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Religion"
-                                  name="txtReligion"
-                                  value={values.txtReligion}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtReligion && errors.txtReligion
-                                  )}
-                                  helperText={String(
-                                    touched.txtReligion && errors.txtReligion
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Residence"
-                                  name="txtResidence"
-                                  value={values.txtResidence}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtResidence && errors.txtResidence
-                                  )}
-                                  helperText={String(
-                                    touched.txtResidence && errors.txtResidence
-                                  )}
-                                />
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        )}
-                        {activeStep === 2 && (
-                          <CardContent>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Employee Code"
-                                  name="txtEmployeeCode"
-                                  value={values.txtEmployeeCode}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtEmployeeCode &&
-                                      errors.txtEmployeeCode
-                                  )}
-                                  helperText={String(
-                                    touched.txtEmployeeCode &&
-                                      errors.txtEmployeeCode
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select Designation"
-                                  name="ddlDesignation"
-                                  value={values.ddlDesignation}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlDesignation &&
-                                      errors.ddlDesignation
-                                  )}
-                                  helperText={String(
-                                    touched.ddlDesignation &&
-                                      errors.ddlDesignation
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {designations.map((option: any) => (
-                                    <MenuItem key={option.id} value={option.id}>
-                                      {option.name}
-                                    </MenuItem>
-                                  ))}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <LocalizationProvider
-                                  dateAdapter={AdapterDayjs}
-                                >
-                                  <DatePicker
-                                    openTo="day"
-                                    inputFormat="DD/MM/YYYY"
-                                    value={values.txtJoinDate}
-                                    onChange={(newValue: any) => {
-                                      setFieldValue('txtJoinDate', newValue);
-                                    }}
-                                    renderInput={(params: any) => (
-                                      <CustomField
-                                        name="txtJoinDate"
-                                        label="Join Date"
-                                        error={Boolean(
-                                          touched.txtJoinDate &&
-                                            errors.txtJoinDate
-                                        )}
-                                        helperText={String(
-                                          touched.txtJoinDate &&
-                                            errors.txtJoinDate
-                                        )}
-                                      >
-                                        <TextField
-                                          {...params}
-                                          fullWidth
-                                          size="medium"
+                                    ))}
+                                  </SelectInput>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <LocalizationProvider
+                                    dateAdapter={AdapterDayjs}
+                                  >
+                                    <DatePicker
+                                      openTo="day"
+                                      inputFormat="DD/MM/YYYY"
+                                      value={values.txtJoinDate}
+                                      onChange={(newValue: any) => {
+                                        setFieldValue('txtJoinDate', newValue);
+                                      }}
+                                      renderInput={(params: any) => (
+                                        <CustomField
                                           name="txtJoinDate"
-                                          value={values.txtJoinDate}
+                                          label="Join Date"
                                           error={Boolean(
                                             touched.txtJoinDate &&
                                               errors.txtJoinDate
                                           )}
-                                        />
-                                      </CustomField>
+                                          helperText={String(
+                                            touched.txtJoinDate &&
+                                              errors.txtJoinDate
+                                          )}
+                                        >
+                                          <TextField
+                                            {...params}
+                                            fullWidth
+                                            size="medium"
+                                            name="txtJoinDate"
+                                            value={values.txtJoinDate}
+                                            error={Boolean(
+                                              touched.txtJoinDate &&
+                                                errors.txtJoinDate
+                                            )}
+                                          />
+                                        </CustomField>
+                                      )}
+                                    />
+                                  </LocalizationProvider>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <SelectInput
+                                    label="Employment Type"
+                                    name="ddlEmploymentType"
+                                    value={values.ddlEmploymentType}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.ddlEmploymentType &&
+                                        errors.ddlEmploymentType
                                     )}
-                                  />
-                                </LocalizationProvider>
+                                    helperText={String(
+                                      touched.ddlEmploymentType &&
+                                        errors.ddlEmploymentType
+                                    )}
+                                  >
+                                    <MenuItem key="-1" value="">
+                                      - None -
+                                    </MenuItem>
+                                    {employeeProfessionalDetails.employmentType.map(
+                                      (option: any) => (
+                                        <MenuItem
+                                          key={option.id}
+                                          value={option.value}
+                                        >
+                                          {option.name}
+                                        </MenuItem>
+                                      )
+                                    )}
+                                  </SelectInput>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={6}>
+                                  <SelectInput
+                                    label="Working Type"
+                                    name="ddlWorkingType"
+                                    value={values.ddlWorkingType}
+                                    onChange={handleChange}
+                                    onBlur={handleBlur}
+                                    error={Boolean(
+                                      touched.ddlWorkingType &&
+                                        errors.ddlWorkingType
+                                    )}
+                                    helperText={String(
+                                      touched.ddlWorkingType &&
+                                        errors.ddlWorkingType
+                                    )}
+                                  >
+                                    <MenuItem key="-1" value="">
+                                      - None -
+                                    </MenuItem>
+                                    {employeeProfessionalDetails.workingType.map(
+                                      (option: any) => (
+                                        <MenuItem
+                                          key={option.id}
+                                          value={option.value}
+                                        >
+                                          {option.name}
+                                        </MenuItem>
+                                      )
+                                    )}
+                                  </SelectInput>
+                                </Grid>
                               </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Employment Type"
-                                  name="ddlEmploymentType"
-                                  value={values.ddlEmploymentType}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlEmploymentType &&
-                                      errors.ddlEmploymentType
-                                  )}
-                                  helperText={String(
-                                    touched.ddlEmploymentType &&
-                                      errors.ddlEmploymentType
-                                  )}
+                            </CardContent>
+                          )}
+                          {activeStep === 3 && (
+                            <FieldArray name="addressDetails">
+                              {({ push, remove }) => (
+                                <div
+                                  style={{
+                                    padding: '20px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between'
+                                  }}
                                 >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeeProfessionalDetails.employmentType.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Working Type"
-                                  name="ddlWorkingType"
-                                  value={values.ddlWorkingType}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlWorkingType &&
-                                      errors.ddlWorkingType
-                                  )}
-                                  helperText={String(
-                                    touched.ddlWorkingType &&
-                                      errors.ddlWorkingType
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeeProfessionalDetails.workingType.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        )}
-                        {activeStep === 3 && (
-                          <FieldArray name="addressDetails">
-                            {({ push, remove }) => (
-                              <div
-                                style={{
-                                  padding: '20px',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  justifyContent: 'space-between'
-                                }}
-                              >
-                                <Button
-                                  variant="contained"
-                                  color="primary"
-                                  onClick={() =>
-                                    push(initialValuesFamilyDetailsEntries)
-                                  }
-                                  sx={{ ml: 80, mb: 2 }}
-                                >
-                                  Add Address
-                                </Button>
-                                {values.addressDetails.map((address, index) => (
-                                  <Accordion key={index} sx={{ mb: 2 }}>
-                                    <AccordionSummary
-                                      expandIcon={<ExpandMoreIcon />}
-                                      aria-controls={`address-${index}-content`}
-                                      id={`address-${index}-header`}
-                                    >
-                                      <Grid
-                                        container
-                                        alignItems="center"
-                                        spacing={2}
-                                      >
-                                        <Grid item xs={11}>
-                                          <Typography variant="subtitle1">
-                                            Address #{index + 1}
-                                            {address.ddlAddressType &&
-                                              ` - ${address.ddlAddressType}`}
-                                          </Typography>
-                                        </Grid>
-                                        <Grid item xs={1}>
-                                          {index > 0 && (
-                                            <IconButton
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                remove(index);
-                                              }}
-                                              size="small"
-                                            >
-                                              <DeleteIcon />
-                                            </IconButton>
-                                          )}
-                                        </Grid>
-                                      </Grid>
-                                    </AccordionSummary>
-                                    <AccordionDetails>
-                                      <Grid container spacing={2}>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <SelectInput
-                                            label="Select Address Type"
-                                            name={`addressDetails.${index}.ddlAddressType`}
-                                            value={
-                                              values.addressDetails[index]
-                                                .ddlAddressType
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.ddlAddressType`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `addressDetails.${index}.ddlAddressType`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.ddlAddressType`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `addressDetails.${index}.ddlAddressType`
-                                              )
-                                            }
+                                  <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={() => {
+                                      push(initialValuesAddressDetailsEntries);
+                                    }}
+                                    sx={{ ml: 80, mb: 2 }}
+                                  >
+                                    Add Address
+                                  </Button>
+
+                                  {values.addressDetails.map(
+                                    (address: any, index: number) => (
+                                      <Accordion key={index} sx={{ mb: 2 }}>
+                                        <AccordionSummary
+                                          expandIcon={<ExpandMoreIcon />}
+                                          aria-controls={`address-${index}-content`}
+                                          id={`address-${index}-header`}
+                                        >
+                                          <Grid
+                                            container
+                                            alignItems="center"
+                                            spacing={2}
                                           >
-                                            <MenuItem key="-1" value="">
-                                              - None -
-                                            </MenuItem>
-                                            {employeeAddressDetails.addressType.map(
-                                              (option) => (
-                                                <MenuItem
-                                                  key={option.id}
-                                                  value={option.value}
+                                            <Grid item xs={11}>
+                                              <Typography variant="subtitle1">
+                                                Address #{index + 1}
+                                                {address.ddlAddressType &&
+                                                  ` - ${address.ddlAddressType}`}
+                                              </Typography>
+                                            </Grid>
+                                            <Grid item xs={1}>
+                                              {index > 0 && (
+                                                <IconButton
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    remove(index);
+                                                  }}
+                                                  size="small"
                                                 >
-                                                  {option.name}
+                                                  <DeleteIcon />
+                                                </IconButton>
+                                              )}
+                                            </Grid>
+                                          </Grid>
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                          <Grid container spacing={2}>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <SelectInput
+                                                label="Select Address Type"
+                                                name={`addressDetails.${index}.ddlAddressType`}
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .ddlAddressType
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.ddlAddressType`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.ddlAddressType`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.ddlAddressType`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.ddlAddressType`
+                                                  )
+                                                }
+                                              >
+                                                <MenuItem value="">
+                                                  - None -
                                                 </MenuItem>
-                                              )
-                                            )}
-                                          </SelectInput>
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Building Name"
-                                            name={`addressDetails.${index}.txtBuildingName`}
-                                            value={
-                                              values.addressDetails[index]
-                                                .txtBuildingName
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtBuildingName`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `addressDetails.${index}.txtBuildingName`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtBuildingName`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `addressDetails.${index}.txtBuildingName`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Flat No"
-                                            name={`addressDetails.${index}.txtFlatNumber`}
-                                            value={
-                                              values.addressDetails[index]
-                                                .txtFlatNumber
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtFlatNumber`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `addressDetails.${index}.txtFlatNumber`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtFlatNumber`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `addressDetails.${index}.txtFlatNumber`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Street Name"
-                                            name={`addressDetails.${index}.txtStreetName`}
-                                            value={
-                                              values.addressDetails[index]
-                                                .txtStreetName
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtStreetName`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `addressDetails.${index}.txtStreetName`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtStreetName`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `addressDetails.${index}.txtStreetName`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Landmark"
-                                            name={`addressDetails.${index}.txtLandmark`}
-                                            value={
-                                              values.addressDetails[index]
-                                                .txtLandmark
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtLandmark`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `addressDetails.${index}.txtLandmark`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtLandmark`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `addressDetails.${index}.txtLandmark`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="City"
-                                            name={`addressDetails.${index}.txtCity`}
-                                            value={
-                                              values.addressDetails[index]
-                                                .txtCity
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtCity`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `addressDetails.${index}.txtCity`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtCity`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `addressDetails.${index}.txtCity`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <SelectInput
-                                            label="Select State"
-                                            name={`addressDetails.${index}.ddlState`}
-                                            value={
-                                              values.addressDetails[index]
-                                                .ddlState
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.ddlState`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `addressDetails.${index}.ddlState`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.ddlState`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `addressDetails.${index}.ddlState`
-                                              )
-                                            }
-                                          >
-                                            <MenuItem key="-1" value="">
-                                              - None -
-                                            </MenuItem>
-                                            {states.map((option, i) => (
-                                              <MenuItem key={i} value={option}>
-                                                {option}
-                                              </MenuItem>
-                                            ))}
-                                          </SelectInput>
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Pincode"
-                                            name={`addressDetails.${index}.txtPinCode`}
-                                            value={
-                                              values.addressDetails[index]
-                                                .txtPincode
-                                            }
-                                            inputProps={{ maxLength: 6 }}
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtPinCode`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `addressDetails.${index}.txtPinCode`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtPinCode`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `addressDetails.${index}.txtPinCode`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Telephone No"
-                                            name={`addressDetails.${index}.txtTelephoneNumber`}
-                                            type="number"
-                                            value={
-                                              values.addressDetails[index]
-                                                .txtTelephoneNumber
-                                            }
-                                            inputProps={{ maxLength: 6 }}
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtTelephoneNumber`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `addressDetails.${index}.txtTelephoneNumber`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtTelephoneNumber`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `addressDetails.${index}.txtTelephoneNumber`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Mobile No"
-                                            name={`addressDetails.${index}.txtPhone`}
-                                            type="number"
-                                            value={
-                                              values.addressDetails[index]
-                                                .txtPhone
-                                            }
-                                            inputProps={{ maxLength: 6 }}
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtPhone`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `addressDetails.${index}.txtPhone`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `addressDetails.${index}.txtPhone`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `addressDetails.${index}.txtPhone`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                      </Grid>
-                                    </AccordionDetails>
-                                  </Accordion>
-                                ))}
-                              </div>
-                            )}
-                          </FieldArray>
-                        )}
-                        {activeStep === 4 && (
-                          <FieldArray name="familyDetails">
-                            {({ push, remove }) => (
-                              <div
-                                style={{
-                                  padding: '20px',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  justifyContent: 'space-between'
-                                }}
-                              >
-                                <Button
-                                  variant="contained"
-                                  color="primary"
-                                  onClick={() =>
-                                    push(initialValuesFamilyDetailsEntries)
-                                  }
-                                  sx={{ ml: 80, mb: 2 }}
+                                                {employeeAddressDetails.addressType.map(
+                                                  (option) => (
+                                                    <MenuItem
+                                                      key={option.id}
+                                                      value={option.value}
+                                                    >
+                                                      {option.name}
+                                                    </MenuItem>
+                                                  )
+                                                )}
+                                              </SelectInput>
+                                            </Grid>
+
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Building Name"
+                                                name={`addressDetails.${index}.txtBuildingName`}
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .txtBuildingName
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtBuildingName`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.txtBuildingName`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtBuildingName`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.txtBuildingName`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Flat No"
+                                                name={`addressDetails.${index}.txtFlatNumber`}
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .txtFlatNumber
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtFlatNumber`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.txtFlatNumber`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtFlatNumber`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.txtFlatNumber`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Street Name"
+                                                name={`addressDetails.${index}.txtStreetName`}
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .txtStreetName
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtStreetName`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.txtStreetName`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtStreetName`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.txtStreetName`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Landmark"
+                                                name={`addressDetails.${index}.txtLandmark`}
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .txtLandmark
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtLandmark`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.txtLandmark`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtLandmark`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.txtLandmark`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="City"
+                                                name={`addressDetails.${index}.txtCity`}
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .txtCity
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtCity`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.txtCity`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtCity`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.txtCity`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <SelectInput
+                                                label="Country"
+                                                name={`addressDetails.${index}.ddlCountry`}
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .ddlCountry
+                                                }
+                                                onChange={(e) => {
+                                                  handleChange(e);
+                                                  handleCountryChange(
+                                                    e.target.value as string
+                                                  );
+                                                }}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.ddlCountry`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.ddlCountry`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.ddlCountry`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.ddlCountry`
+                                                  )
+                                                }
+                                              >
+                                                <MenuItem key="-1" value="">
+                                                  - None -
+                                                </MenuItem>
+                                                {countries.map((option, i) => (
+                                                  <MenuItem
+                                                    key={i}
+                                                    value={option.alpha2Code}
+                                                  >
+                                                    {option.country}
+                                                  </MenuItem>
+                                                ))}
+                                              </SelectInput>
+                                            </Grid>
+
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <SelectInput
+                                                label="State"
+                                                name={`addressDetails.${index}.ddlState`}
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .ddlState
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.ddlState`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.ddlState`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.ddlState`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.ddlState`
+                                                  )
+                                                }
+                                              >
+                                                <MenuItem key="-1" value="">
+                                                  - None -
+                                                </MenuItem>
+                                                {states.map((option, i) => (
+                                                  <MenuItem
+                                                    key={i}
+                                                    value={option}
+                                                  >
+                                                    {option}
+                                                  </MenuItem>
+                                                ))}
+                                              </SelectInput>
+                                            </Grid>
+
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Pincode"
+                                                name={`addressDetails.${index}.txtPincode`}
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .txtPincode
+                                                }
+                                                inputProps={{ maxLength: 6 }}
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtPincode`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.txtPincode`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtPincode`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.txtPincode`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Telephone No"
+                                                name={`addressDetails.${index}.txtTelephoneNumber`}
+                                                type="number"
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .txtTelephoneNumber
+                                                }
+                                                inputProps={{ maxLength: 10 }}
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtTelephoneNumber`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.txtTelephoneNumber`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtTelephoneNumber`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.txtTelephoneNumber`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Mobile No"
+                                                name={`addressDetails.${index}.txtPhone`}
+                                                type="number"
+                                                value={
+                                                  values.addressDetails[index]
+                                                    .txtPhone
+                                                }
+                                                inputProps={{ maxLength: 10 }}
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtPhone`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `addressDetails.${index}.txtPhone`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `addressDetails.${index}.txtPhone`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `addressDetails.${index}.txtPhone`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                          </Grid>
+                                        </AccordionDetails>
+                                      </Accordion>
+                                    )
+                                  )}
+                                </div>
+                              )}
+                            </FieldArray>
+                          )}
+                          {activeStep === 4 && (
+                            <FieldArray name="familyDetails">
+                              {({ push, remove }) => (
+                                <div
+                                  style={{
+                                    padding: '20px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between'
+                                  }}
                                 >
-                                  Add Member
-                                </Button>
-                                {values.familyDetails.map((member, index) => (
-                                  <Accordion key={index} sx={{ mb: 2 }}>
-                                    <AccordionSummary
-                                      expandIcon={<ExpandMoreIcon />}
-                                      aria-controls={`family-member-${index}-content`}
-                                      id={`family-member-${index}-header`}
-                                    >
-                                      <Grid
-                                        container
-                                        alignItems="center"
-                                        spacing={2}
+                                  <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={() =>
+                                      push(initialValuesFamilyDetailsEntries)
+                                    }
+                                    sx={{ ml: 80, mb: 2 }}
+                                  >
+                                    Add Member
+                                  </Button>
+                                  {values.familyDetails.map((member, index) => (
+                                    <Accordion key={index} sx={{ mb: 2 }}>
+                                      <AccordionSummary
+                                        expandIcon={<ExpandMoreIcon />}
+                                        aria-controls={`family-member-${index}-content`}
+                                        id={`family-member-${index}-header`}
                                       >
-                                        <Grid item xs={11}>
-                                          <Typography variant="subtitle1">
-                                            Family Member #{index + 1}
-                                            {member.txtName &&
-                                              ` - ${member.txtName}`}
-                                            {member.ddlRelationType &&
-                                              ` (${member.ddlRelationType})`}
-                                          </Typography>
+                                        <Grid
+                                          container
+                                          alignItems="center"
+                                          spacing={2}
+                                        >
+                                          <Grid item xs={11}>
+                                            <Typography variant="subtitle1">
+                                              Family Member #{index + 1}
+                                              {member.txtName &&
+                                                ` - ${member.txtName}`}
+                                              {member.ddlRelationType &&
+                                                ` (${member.ddlRelationType})`}
+                                            </Typography>
+                                          </Grid>
+                                          <Grid item xs={1}>
+                                            {index > 0 && (
+                                              <IconButton
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  remove(index);
+                                                }}
+                                                size="small"
+                                              >
+                                                <DeleteIcon />
+                                              </IconButton>
+                                            )}
+                                          </Grid>
                                         </Grid>
-                                        <Grid item xs={1}>
-                                          {index > 0 && (
-                                            <IconButton
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                remove(index);
-                                              }}
-                                              size="small"
-                                            >
-                                              <DeleteIcon />
-                                            </IconButton>
-                                          )}
-                                        </Grid>
-                                      </Grid>
-                                    </AccordionSummary>
-                                    <AccordionDetails>
-                                      <Grid container spacing={2}>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <SelectInput
-                                            label="Select Relation Type"
-                                            name={`familyDetails.${index}.ddlRelationType`}
-                                            value={
-                                              values.familyDetails[index]
-                                                .ddlRelationType
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.ddlRelationType`
-                                              ) &&
+                                      </AccordionSummary>
+                                      <AccordionDetails>
+                                        <Grid container spacing={2}>
+                                          <Grid item xs={12} sm={6} md={6}>
+                                            <SelectInput
+                                              label="Select Relation Type"
+                                              name={`familyDetails.${index}.ddlRelationType`}
+                                              value={
+                                                values.familyDetails[index]
+                                                  .ddlRelationType
+                                              }
+                                              onChange={handleChange}
+                                              onBlur={handleBlur}
+                                              error={Boolean(
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.ddlRelationType`
+                                                ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `familyDetails.${index}.ddlRelationType`
+                                                  )
+                                              )}
+                                              helperText={
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.ddlRelationType`
+                                                ) &&
                                                 getIn(
                                                   errors,
                                                   `familyDetails.${index}.ddlRelationType`
                                                 )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.ddlRelationType`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `familyDetails.${index}.ddlRelationType`
-                                              )
-                                            }
-                                          >
-                                            <MenuItem key="-1" value="">
-                                              - None -
-                                            </MenuItem>
-                                            {employeeFamilyDetails.relationType.map(
-                                              (option) => (
-                                                <MenuItem
-                                                  key={option.id}
-                                                  value={option.value}
-                                                >
-                                                  {option.name}
-                                                </MenuItem>
-                                              )
-                                            )}
-                                          </SelectInput>
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Name"
-                                            name={`familyDetails.${index}.txtName`}
-                                            value={
-                                              values.familyDetails[index]
-                                                .txtName
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtName`
-                                              ) &&
+                                              }
+                                            >
+                                              <MenuItem key="-1" value="">
+                                                - None -
+                                              </MenuItem>
+                                              {employeeFamilyDetails.relationType.map(
+                                                (option) => (
+                                                  <MenuItem
+                                                    key={option.id}
+                                                    value={option.value}
+                                                  >
+                                                    {option.name}
+                                                  </MenuItem>
+                                                )
+                                              )}
+                                            </SelectInput>
+                                          </Grid>
+                                          <Grid item xs={12} sm={6} md={6}>
+                                            <TextInput
+                                              fullWidth
+                                              label="Name"
+                                              name={`familyDetails.${index}.txtName`}
+                                              value={
+                                                values.familyDetails[index]
+                                                  .txtName
+                                              }
+                                              onChange={handleChange}
+                                              onBlur={handleBlur}
+                                              error={Boolean(
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.txtName`
+                                                ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `familyDetails.${index}.txtName`
+                                                  )
+                                              )}
+                                              helperText={
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.txtName`
+                                                ) &&
                                                 getIn(
                                                   errors,
                                                   `familyDetails.${index}.txtName`
                                                 )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtName`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `familyDetails.${index}.txtName`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Age"
-                                            name={`familyDetails.${index}.txtAge`}
-                                            type="number"
-                                            value={
-                                              values.familyDetails[index].txtAge
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtAge`
-                                              ) &&
+                                              }
+                                            />
+                                          </Grid>
+                                          <Grid item xs={12} sm={6} md={6}>
+                                            <TextInput
+                                              fullWidth
+                                              label="Age"
+                                              name={`familyDetails.${index}.txtAge`}
+                                              type="number"
+                                              value={
+                                                values.familyDetails[index]
+                                                  .txtAge
+                                              }
+                                              onChange={handleChange}
+                                              onBlur={handleBlur}
+                                              error={Boolean(
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.txtAge`
+                                                ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `familyDetails.${index}.txtAge`
+                                                  )
+                                              )}
+                                              helperText={
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.txtAge`
+                                                ) &&
                                                 getIn(
                                                   errors,
                                                   `familyDetails.${index}.txtAge`
                                                 )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtAge`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `familyDetails.${index}.txtAge`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Birth Date"
-                                            name={`familyDetails.${index}.txtBirthDate`}
-                                            type="date"
-                                            value={
-                                              values.familyDetails[index]
-                                                .txtBirthDate
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtBirthDate`
-                                              ) &&
+                                              }
+                                            />
+                                          </Grid>
+                                          <Grid item xs={12} sm={6} md={6}>
+                                            <TextInput
+                                              fullWidth
+                                              label="Birth Date"
+                                              name={`familyDetails.${index}.txtBirthDate`}
+                                              type="date"
+                                              value={
+                                                values.familyDetails[index]
+                                                  .txtBirthDate
+                                              }
+                                              onChange={handleChange}
+                                              onBlur={handleBlur}
+                                              error={Boolean(
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.txtBirthDate`
+                                                ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `familyDetails.${index}.txtBirthDate`
+                                                  )
+                                              )}
+                                              helperText={
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.txtBirthDate`
+                                                ) &&
                                                 getIn(
                                                   errors,
                                                   `familyDetails.${index}.txtBirthDate`
                                                 )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtBirthDate`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `familyDetails.${index}.txtBirthDate`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Current Address"
-                                            name={`familyDetails.${index}.txtCurrentAddress`}
-                                            multiline
-                                            rows={3}
-                                            value={
-                                              values.familyDetails[index]
-                                                .txtCurrentAddress
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtCurrentAddress`
-                                              ) &&
+                                              }
+                                            />
+                                          </Grid>
+                                          <Grid item xs={12} sm={6} md={6}>
+                                            <TextInput
+                                              fullWidth
+                                              label="Current Address"
+                                              name={`familyDetails.${index}.txtCurrentAddress`}
+                                              multiline
+                                              rows={3}
+                                              value={
+                                                values.familyDetails[index]
+                                                  .txtCurrentAddress
+                                              }
+                                              onChange={handleChange}
+                                              onBlur={handleBlur}
+                                              error={Boolean(
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.txtCurrentAddress`
+                                                ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `familyDetails.${index}.txtCurrentAddress`
+                                                  )
+                                              )}
+                                              helperText={
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.txtCurrentAddress`
+                                                ) &&
                                                 getIn(
                                                   errors,
                                                   `familyDetails.${index}.txtCurrentAddress`
                                                 )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtCurrentAddress`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `familyDetails.${index}.txtCurrentAddress`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <SelectInput
-                                            label="Birth Country"
-                                            name={`familyDetails.${index}.ddlBirthCountry`}
-                                            value={
-                                              values.familyDetails[index]
-                                                .ddlBirthCountry
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.ddlBirthCountry`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `familyDetails.${index}.ddlBirthCountry`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.ddlBirthCountry`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `familyDetails.${index}.ddlBirthCountry`
-                                              )
-                                            }
-                                          >
-                                            <MenuItem key="-1" value="">
-                                              - None -
-                                            </MenuItem>
-                                            {countries.map((option, i) => (
-                                              <MenuItem
-                                                key={i}
-                                                value={option.alpha2Code}
-                                              >
-                                                {option.country}
-                                              </MenuItem>
-                                            ))}
-                                          </SelectInput>
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <SelectInput
-                                            label="Birth State"
-                                            name={`familyDetails.${index}.ddlBirthState`}
-                                            value={
-                                              values.familyDetails[index]
-                                                .ddlBirthState
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.ddlBirthState`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `familyDetails.${index}.ddlBirthState`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.ddlBirthState`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `familyDetails.${index}.ddlBirthState`
-                                              )
-                                            }
-                                          >
-                                            <MenuItem key="-1" value="">
-                                              - None -
-                                            </MenuItem>
-                                            {states.map((option, i) => (
-                                              <MenuItem key={i} value={option}>
-                                                {option}
-                                              </MenuItem>
-                                            ))}
-                                          </SelectInput>
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Birth Location"
-                                            name={`familyDetails.${index}.txtBirthLocation`}
-                                            value={
-                                              values.familyDetails[index]
-                                                .txtBirthLocation
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtBirthLocation`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `familyDetails.${index}.txtBirthLocation`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtBirthLocation`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `familyDetails.${index}.txtBirthLocation`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Occupation"
-                                            name={`familyDetails.${index}.txtOccupation`}
-                                            value={
-                                              values.familyDetails[index]
-                                                .txtOccupation
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtOccupation`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `familyDetails.${index}.txtOccupation`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtOccupation`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `familyDetails.${index}.txtOccupation`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={6}>
-                                          <TextInput
-                                            fullWidth
-                                            label="Phone"
-                                            name={`familyDetails.${index}.txtPhone`}
-                                            type="number"
-                                            value={
-                                              values.familyDetails[index]
-                                                .txtPhone
-                                            }
-                                            onChange={handleChange}
-                                            onBlur={handleBlur}
-                                            error={Boolean(
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtPhone`
-                                              ) &&
-                                                getIn(
-                                                  errors,
-                                                  `familyDetails.${index}.txtPhone`
-                                                )
-                                            )}
-                                            helperText={
-                                              getIn(
-                                                touched,
-                                                `familyDetails.${index}.txtPhone`
-                                              ) &&
-                                              getIn(
-                                                errors,
-                                                `familyDetails.${index}.txtPhone`
-                                              )
-                                            }
-                                          />
-                                        </Grid>
-                                      </Grid>
-                                    </AccordionDetails>
-                                  </Accordion>
-                                ))}
-                              </div>
-                            )}
-                          </FieldArray>
-                        )}
-                        {activeStep === 5 && (
-                          <FieldArray name="educationDetails">
-                            {({ push, remove }) => (
-                              <div
-                                style={{
-                                  padding: '20px',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  justifyContent: 'space-between'
-                                }}
-                              >
-                                <Button
-                                  variant="contained"
-                                  color="primary"
-                                  onClick={() =>
-                                    push(initialValuesEducationDetailsEntries)
-                                  }
-                                  sx={{ ml: 80, mb: 2 }}
-                                >
-                                  Add Education
-                                </Button>
-                                {values.educationDetails.map(
-                                  (education, index) => (
-                                    <Accordion key={index} sx={{ mb: 2 }}>
-                                      <AccordionSummary
-                                        expandIcon={<ExpandMoreIcon />}
-                                        aria-controls={`education-${index}-content`}
-                                        id={`education-${index}-header`}
-                                      >
-                                        <Grid
-                                          container
-                                          alignItems="center"
-                                          spacing={2}
-                                        >
-                                          <Grid item xs={11}>
-                                            <Typography variant="subtitle1">
-                                              Education #{index + 1}
-                                              {education.ddlCourse &&
-                                                ` - ${education.ddlCourse}`}
-                                              {education.txtDegreeSpecialization &&
-                                                ` (${education.txtDegreeSpecialization})`}
-                                            </Typography>
-                                          </Grid>
-                                          <Grid item xs={1}>
-                                            {index > 0 && (
-                                              <IconButton
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  remove(index);
-                                                }}
-                                                size="small"
-                                              >
-                                                <DeleteIcon />
-                                              </IconButton>
-                                            )}
-                                          </Grid>
-                                        </Grid>
-                                      </AccordionSummary>
-                                      <AccordionDetails>
-                                        <Grid container spacing={2}>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <SelectInput
-                                              label="Course"
-                                              name={`educationDetails.${index}.ddlCourse`}
-                                              value={
-                                                values.educationDetails[index]
-                                                  .ddlCourse
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.ddlCourse`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `educationDetails.${index}.ddlCourse`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.ddlCourse`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `educationDetails.${index}.ddlCourse`
-                                                )
-                                              }
-                                            >
-                                              <MenuItem key="-1" value="">
-                                                - None -
-                                              </MenuItem>
-                                              {employeeEducationDetails.course.map(
-                                                (option) => (
-                                                  <MenuItem
-                                                    key={option.id}
-                                                    value={option.value}
-                                                  >
-                                                    {option.name}
-                                                  </MenuItem>
-                                                )
-                                              )}
-                                            </SelectInput>
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="Degree Specialization"
-                                              name={`educationDetails.${index}.txtDegreeSpecialization`}
-                                              value={
-                                                values.educationDetails[index]
-                                                  .txtDegreeSpecialization
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.txtDegreeSpecialization`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `educationDetails.${index}.txtDegreeSpecialization`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.txtDegreeSpecialization`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `educationDetails.${index}.txtDegreeSpecialization`
-                                                )
-                                              }
-                                            />
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="Institute Name"
-                                              name={`educationDetails.${index}.txtInstituteName`}
-                                              value={
-                                                values.educationDetails[index]
-                                                  .txtInstituteName
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.txtInstituteName`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `educationDetails.${index}.txtInstituteName`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.txtInstituteName`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `educationDetails.${index}.txtInstituteName`
-                                                )
-                                              }
-                                            />
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <LocalizationProvider
-                                              dateAdapter={AdapterDayjs}
-                                            >
-                                              <DatePicker
-                                                openTo="day"
-                                                inputFormat="DD/MM/YYYY"
-                                                value={
-                                                  values.educationDetails[index]
-                                                    .txtFromDate
-                                                }
-                                                onChange={(newValue) => {
-                                                  setFieldValue(
-                                                    `educationDetails.${index}.txtFromDate`,
-                                                    newValue
-                                                  );
-                                                }}
-                                                renderInput={(params) => (
-                                                  <CustomField
-                                                    name={`educationDetails.${index}.txtFromDate`}
-                                                    label="From Date"
-                                                    error={Boolean(
-                                                      getIn(
-                                                        touched,
-                                                        `educationDetails.${index}.txtFromDate`
-                                                      ) &&
-                                                        getIn(
-                                                          errors,
-                                                          `educationDetails.${index}.txtFromDate`
-                                                        )
-                                                    )}
-                                                    helperText={
-                                                      getIn(
-                                                        touched,
-                                                        `educationDetails.${index}.txtFromDate`
-                                                      ) &&
-                                                      getIn(
-                                                        errors,
-                                                        `educationDetails.${index}.txtFromDate`
-                                                      )
-                                                    }
-                                                  >
-                                                    <TextField
-                                                      {...params}
-                                                      fullWidth
-                                                      size="medium"
-                                                      name={`educationDetails.${index}.txtFromDate`}
-                                                      value={
-                                                        values.educationDetails[
-                                                          index
-                                                        ].txtFromDate
-                                                      }
-                                                      error={Boolean(
-                                                        getIn(
-                                                          touched,
-                                                          `educationDetails.${index}.txtFromDate`
-                                                        ) &&
-                                                          getIn(
-                                                            errors,
-                                                            `educationDetails.${index}.txtFromDate`
-                                                          )
-                                                      )}
-                                                    />
-                                                  </CustomField>
-                                                )}
-                                              />
-                                            </LocalizationProvider>
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <LocalizationProvider
-                                              dateAdapter={AdapterDayjs}
-                                            >
-                                              <DatePicker
-                                                openTo="day"
-                                                inputFormat="DD/MM/YYYY"
-                                                value={
-                                                  values.educationDetails[index]
-                                                    .txtToDate
-                                                }
-                                                onChange={(newValue) => {
-                                                  setFieldValue(
-                                                    `educationDetails.${index}.txtToDate`,
-                                                    newValue
-                                                  );
-                                                }}
-                                                renderInput={(params) => (
-                                                  <CustomField
-                                                    name={`educationDetails.${index}.txtToDate`}
-                                                    label="To Date"
-                                                    error={Boolean(
-                                                      getIn(
-                                                        touched,
-                                                        `educationDetails.${index}.txtToDate`
-                                                      ) &&
-                                                        getIn(
-                                                          errors,
-                                                          `educationDetails.${index}.txtToDate`
-                                                        )
-                                                    )}
-                                                    helperText={
-                                                      getIn(
-                                                        touched,
-                                                        `educationDetails.${index}.txtToDate`
-                                                      ) &&
-                                                      getIn(
-                                                        errors,
-                                                        `educationDetails.${index}.txtToDate`
-                                                      )
-                                                    }
-                                                  >
-                                                    <TextField
-                                                      {...params}
-                                                      fullWidth
-                                                      size="medium"
-                                                      name={`educationDetails.${index}.txtToDate`}
-                                                      value={
-                                                        values.educationDetails[
-                                                          index
-                                                        ].txtToDate
-                                                      }
-                                                      error={Boolean(
-                                                        getIn(
-                                                          touched,
-                                                          `educationDetails.${index}.txtToDate`
-                                                        ) &&
-                                                          getIn(
-                                                            errors,
-                                                            `educationDetails.${index}.txtToDate`
-                                                          )
-                                                      )}
-                                                    />
-                                                  </CustomField>
-                                                )}
-                                              />
-                                            </LocalizationProvider>
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <SelectInput
-                                              label="Status"
-                                              name={`educationDetails.${index}.ddlStatus`}
-                                              value={
-                                                values.educationDetails[index]
-                                                  .ddlStatus
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.ddlStatus`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `educationDetails.${index}.ddlStatus`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.ddlStatus`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `educationDetails.${index}.ddlStatus`
-                                                )
-                                              }
-                                            >
-                                              <MenuItem key="-1" value="">
-                                                - None -
-                                              </MenuItem>
-                                              {employeeEducationDetails.status.map(
-                                                (option) => (
-                                                  <MenuItem
-                                                    key={option.id}
-                                                    value={option.value}
-                                                  >
-                                                    {option.name}
-                                                  </MenuItem>
-                                                )
-                                              )}
-                                            </SelectInput>
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <SelectInput
-                                              label="Study Mode"
-                                              name={`educationDetails.${index}.ddlStudyMode`}
-                                              value={
-                                                values.educationDetails[index]
-                                                  .ddlStudyMode
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.ddlStudyMode`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `educationDetails.${index}.ddlStudyMode`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.ddlStudyMode`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `educationDetails.${index}.ddlStudyMode`
-                                                )
-                                              }
-                                            >
-                                              <MenuItem key="-1" value="">
-                                                - None -
-                                              </MenuItem>
-                                              {employeeEducationDetails.studyMode.map(
-                                                (option) => (
-                                                  <MenuItem
-                                                    key={option.id}
-                                                    value={option.value}
-                                                  >
-                                                    {option.name}
-                                                  </MenuItem>
-                                                )
-                                              )}
-                                            </SelectInput>
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="Percentage"
-                                              name={`educationDetails.${index}.txtPercentage`}
-                                              type="number"
-                                              value={
-                                                values.educationDetails[index]
-                                                  .txtPercentage
-                                              }
-                                              inputProps={{ min: 0, max: 100 }}
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.txtPercentage`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `educationDetails.${index}.txtPercentage`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `educationDetails.${index}.txtPercentage`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `educationDetails.${index}.txtPercentage`
-                                                )
-                                              }
-                                            />
-                                          </Grid>
-                                        </Grid>
-                                      </AccordionDetails>
-                                    </Accordion>
-                                  )
-                                )}
-                              </div>
-                            )}
-                          </FieldArray>
-                        )}
-                        {activeStep === 6 && (
-                          <FieldArray name="emergencyContactDetails">
-                            {({ push, remove }) => (
-                              <div
-                                style={{
-                                  padding: '20px',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  justifyContent: 'space-between'
-                                }}
-                              >
-                                <Button
-                                  variant="contained"
-                                  color="primary"
-                                  onClick={() =>
-                                    push(
-                                      initialValuesEmergencyContactDetailsEntries
-                                    )
-                                  }
-                                  sx={{ ml: 80, mb: 2 }}
-                                >
-                                  Add Contact
-                                </Button>
-                                {values.emergencyContactDetails.map(
-                                  (contact, index) => (
-                                    <Accordion key={index} sx={{ mb: 2 }}>
-                                      <AccordionSummary
-                                        expandIcon={<ExpandMoreIcon />}
-                                        aria-controls={`emergency-contact-${index}-content`}
-                                        id={`emergency-contact-${index}-header`}
-                                      >
-                                        <Grid
-                                          container
-                                          alignItems="center"
-                                          spacing={2}
-                                        >
-                                          <Grid item xs={11}>
-                                            <Typography variant="subtitle1">
-                                              Emergency Contact #{index + 1}
-                                              {contact.txtContactName &&
-                                                ` - ${contact.txtContactName}`}
-                                              {contact.ddlContactRelation &&
-                                                ` (${contact.ddlContactRelation})`}
-                                            </Typography>
-                                          </Grid>
-                                          <Grid item xs={1}>
-                                            {index > 0 && (
-                                              <IconButton
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  remove(index);
-                                                }}
-                                                size="small"
-                                              >
-                                                <DeleteIcon />
-                                              </IconButton>
-                                            )}
-                                          </Grid>
-                                        </Grid>
-                                      </AccordionSummary>
-                                      <AccordionDetails>
-                                        <Grid container spacing={2}>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="Contact Name"
-                                              name={`emergencyContactDetails.${index}.txtContactName`}
-                                              value={
-                                                values.emergencyContactDetails[
-                                                  index
-                                                ].txtContactName
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `emergencyContactDetails.${index}.txtContactName`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `emergencyContactDetails.${index}.txtContactName`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `emergencyContactDetails.${index}.txtContactName`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `emergencyContactDetails.${index}.txtContactName`
-                                                )
-                                              }
-                                            />
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="Contact Address"
-                                              name={`emergencyContactDetails.${index}.txtContactAddress`}
-                                              multiline
-                                              rows={3}
-                                              value={
-                                                values.emergencyContactDetails[
-                                                  index
-                                                ].txtContactAddress
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `emergencyContactDetails.${index}.txtContactAddress`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `emergencyContactDetails.${index}.txtContactAddress`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `emergencyContactDetails.${index}.txtContactAddress`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `emergencyContactDetails.${index}.txtContactAddress`
-                                                )
                                               }
                                             />
                                           </Grid>
                                           <Grid item xs={12} sm={6} md={6}>
                                             <SelectInput
-                                              label="Contact Relation"
-                                              name={`emergencyContactDetails.${index}.ddlContactRelation`}
+                                              label="Birth Country"
+                                              name={`familyDetails.${index}.ddlBirthCountry`}
                                               value={
-                                                values.emergencyContactDetails[
-                                                  index
-                                                ].ddlContactRelation
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `emergencyContactDetails.${index}.ddlContactRelation`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `emergencyContactDetails.${index}.ddlContactRelation`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `emergencyContactDetails.${index}.ddlContactRelation`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `emergencyContactDetails.${index}.ddlContactRelation`
-                                                )
-                                              }
-                                            >
-                                              <MenuItem key="-1" value="">
-                                                - None -
-                                              </MenuItem>
-                                              {employeeEmergencyContactDetails.contactRelation.map(
-                                                (option) => (
-                                                  <MenuItem
-                                                    key={option.id}
-                                                    value={option.value}
-                                                  >
-                                                    {option.name}
-                                                  </MenuItem>
-                                                )
-                                              )}
-                                            </SelectInput>
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="Phone Number"
-                                              name={`emergencyContactDetails.${index}.txtPhone`}
-                                              type="number"
-                                              value={
-                                                values.emergencyContactDetails[
-                                                  index
-                                                ].txtPhone
-                                              }
-                                              inputProps={{ maxLength: 10 }}
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `emergencyContactDetails.${index}.txtPhone`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `emergencyContactDetails.${index}.txtPhone`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `emergencyContactDetails.${index}.txtPhone`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `emergencyContactDetails.${index}.txtPhone`
-                                                )
-                                              }
-                                            />
-                                          </Grid>
-                                        </Grid>
-                                      </AccordionDetails>
-                                    </Accordion>
-                                  )
-                                )}
-                              </div>
-                            )}
-                          </FieldArray>
-                        )}
-                        {activeStep === 7 && (
-                          <FieldArray name="experienceDetails">
-                            {({ push, remove }) => (
-                              <div
-                                style={{
-                                  padding: '20px',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  justifyContent: 'space-between'
-                                }}
-                              >
-                                <Button
-                                  variant="contained"
-                                  color="primary"
-                                  onClick={() =>
-                                    push(initialValuesExperienceDetailsEntries)
-                                  }
-                                  sx={{ ml: 80, mb: 2 }}
-                                >
-                                  Add Experience
-                                </Button>
-                                {values.experienceDetails.map(
-                                  (experience, index) => (
-                                    <Accordion key={index} sx={{ mb: 2 }}>
-                                      <AccordionSummary
-                                        expandIcon={<ExpandMoreIcon />}
-                                        aria-controls={`experience-${index}-content`}
-                                        id={`experience-${index}-header`}
-                                      >
-                                        <Grid
-                                          container
-                                          alignItems="center"
-                                          spacing={2}
-                                        >
-                                          <Grid item xs={11}>
-                                            <Typography variant="subtitle1">
-                                              Experience #{index + 1}
-                                              {experience.txtCompanyName &&
-                                                ` - ${experience.txtCompanyName}`}
-                                              {experience.txtJobTitle &&
-                                                ` (${experience.txtJobTitle})`}
-                                            </Typography>
-                                          </Grid>
-                                          <Grid item xs={1}>
-                                            {index > 0 && (
-                                              <IconButton
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  remove(index);
-                                                }}
-                                                size="small"
-                                              >
-                                                <DeleteIcon />
-                                              </IconButton>
-                                            )}
-                                          </Grid>
-                                        </Grid>
-                                      </AccordionSummary>
-                                      <AccordionDetails>
-                                        <Grid container spacing={2}>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="Company Name"
-                                              name={`experienceDetails.${index}.txtCompanyName`}
-                                              value={
-                                                values.experienceDetails[index]
-                                                  .txtCompanyName
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `experienceDetails.${index}.txtCompanyName`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `experienceDetails.${index}.txtCompanyName`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `experienceDetails.${index}.txtCompanyName`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `experienceDetails.${index}.txtCompanyName`
-                                                )
-                                              }
-                                            />
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="Employee ID"
-                                              name={`experienceDetails.${index}.txtEmployeeId`}
-                                              value={
-                                                values.experienceDetails[index]
-                                                  .txtEmployeeId
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `experienceDetails.${index}.txtEmployeeId`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `experienceDetails.${index}.txtEmployeeId`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `experienceDetails.${index}.txtEmployeeId`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `experienceDetails.${index}.txtEmployeeId`
-                                                )
-                                              }
-                                            />
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="Job Title"
-                                              name={`experienceDetails.${index}.txtJobTitle`}
-                                              value={
-                                                values.experienceDetails[index]
-                                                  .txtJobTitle
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `experienceDetails.${index}.txtJobTitle`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `experienceDetails.${index}.txtJobTitle`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `experienceDetails.${index}.txtJobTitle`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `experienceDetails.${index}.txtJobTitle`
-                                                )
-                                              }
-                                            />
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <LocalizationProvider
-                                              dateAdapter={AdapterDayjs}
-                                            >
-                                              <DatePicker
-                                                openTo="day"
-                                                inputFormat="DD/MM/YYYY"
-                                                value={
-                                                  values.experienceDetails[
-                                                    index
-                                                  ].txtStartDate
-                                                }
-                                                onChange={(newValue) => {
-                                                  setFieldValue(
-                                                    `experienceDetails.${index}.txtStartDate`,
-                                                    newValue
-                                                  );
-                                                }}
-                                                renderInput={(params) => (
-                                                  <CustomField
-                                                    name={`experienceDetails.${index}.txtStartDate`}
-                                                    label="Start Date"
-                                                    error={Boolean(
-                                                      getIn(
-                                                        touched,
-                                                        `experienceDetails.${index}.txtStartDate`
-                                                      ) &&
-                                                        getIn(
-                                                          errors,
-                                                          `experienceDetails.${index}.txtStartDate`
-                                                        )
-                                                    )}
-                                                    helperText={
-                                                      getIn(
-                                                        touched,
-                                                        `experienceDetails.${index}.txtStartDate`
-                                                      ) &&
-                                                      getIn(
-                                                        errors,
-                                                        `experienceDetails.${index}.txtStartDate`
-                                                      )
-                                                    }
-                                                  >
-                                                    <TextField
-                                                      {...params}
-                                                      fullWidth
-                                                      size="medium"
-                                                      name={`experienceDetails.${index}.txtStartDate`}
-                                                      value={
-                                                        values
-                                                          .experienceDetails[
-                                                          index
-                                                        ].txtStartDate
-                                                      }
-                                                      error={Boolean(
-                                                        getIn(
-                                                          touched,
-                                                          `experienceDetails.${index}.txtStartDate`
-                                                        ) &&
-                                                          getIn(
-                                                            errors,
-                                                            `experienceDetails.${index}.txtStartDate`
-                                                          )
-                                                      )}
-                                                    />
-                                                  </CustomField>
-                                                )}
-                                              />
-                                            </LocalizationProvider>
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <LocalizationProvider
-                                              dateAdapter={AdapterDayjs}
-                                            >
-                                              <DatePicker
-                                                openTo="day"
-                                                inputFormat="DD/MM/YYYY"
-                                                value={
-                                                  values.experienceDetails[
-                                                    index
-                                                  ].txtEndDate
-                                                }
-                                                onChange={(newValue) => {
-                                                  setFieldValue(
-                                                    `experienceDetails.${index}.txtEndDate`,
-                                                    newValue
-                                                  );
-                                                }}
-                                                renderInput={(params) => (
-                                                  <CustomField
-                                                    name={`experienceDetails.${index}.txtEndDate`}
-                                                    label="End Date"
-                                                    error={Boolean(
-                                                      getIn(
-                                                        touched,
-                                                        `experienceDetails.${index}.txtEndDate`
-                                                      ) &&
-                                                        getIn(
-                                                          errors,
-                                                          `experienceDetails.${index}.txtEndDate`
-                                                        )
-                                                    )}
-                                                    helperText={
-                                                      getIn(
-                                                        touched,
-                                                        `experienceDetails.${index}.txtEndDate`
-                                                      ) &&
-                                                      getIn(
-                                                        errors,
-                                                        `experienceDetails.${index}.txtEndDate`
-                                                      )
-                                                    }
-                                                  >
-                                                    <TextField
-                                                      {...params}
-                                                      fullWidth
-                                                      size="medium"
-                                                      name={`experienceDetails.${index}.txtEndDate`}
-                                                      value={
-                                                        values
-                                                          .experienceDetails[
-                                                          index
-                                                        ].txtEndDate
-                                                      }
-                                                      error={Boolean(
-                                                        getIn(
-                                                          touched,
-                                                          `experienceDetails.${index}.txtEndDate`
-                                                        ) &&
-                                                          getIn(
-                                                            errors,
-                                                            `experienceDetails.${index}.txtEndDate`
-                                                          )
-                                                      )}
-                                                    />
-                                                  </CustomField>
-                                                )}
-                                              />
-                                            </LocalizationProvider>
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <SelectInput
-                                              label="Select Country"
-                                              name={`experienceDetails.${index}.ddlCountry`}
-                                              value={
-                                                values.experienceDetails[index]
-                                                  .ddlCountry
+                                                values.familyDetails[index]
+                                                  .ddlBirthCountry
                                               }
                                               onChange={(e) => {
                                                 handleChange(e);
@@ -3387,21 +2725,21 @@ const CreateEmployee = (): JSX.Element => {
                                               error={Boolean(
                                                 getIn(
                                                   touched,
-                                                  `experienceDetails.${index}.ddlCountry`
+                                                  `familyDetails.${index}.ddlBirthCountry`
                                                 ) &&
                                                   getIn(
                                                     errors,
-                                                    `experienceDetails.${index}.ddlCountry`
+                                                    `familyDetails.${index}.ddlBirthCountry`
                                                   )
                                               )}
                                               helperText={
                                                 getIn(
                                                   touched,
-                                                  `experienceDetails.${index}.ddlCountry`
+                                                  `familyDetails.${index}.ddlBirthCountry`
                                                 ) &&
                                                 getIn(
                                                   errors,
-                                                  `experienceDetails.${index}.ddlCountry`
+                                                  `familyDetails.${index}.ddlBirthCountry`
                                                 )
                                               }
                                             >
@@ -3419,66 +2757,33 @@ const CreateEmployee = (): JSX.Element => {
                                             </SelectInput>
                                           </Grid>
                                           <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="City"
-                                              name={`experienceDetails.${index}.txtCity`}
-                                              value={
-                                                values.experienceDetails[index]
-                                                  .txtCity
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `experienceDetails.${index}.txtCity`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `experienceDetails.${index}.txtCity`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `experienceDetails.${index}.txtCity`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `experienceDetails.${index}.txtCity`
-                                                )
-                                              }
-                                            />
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
                                             <SelectInput
-                                              label="Select State"
-                                              name={`experienceDetails.${index}.ddlState`}
+                                              label="Birth State"
+                                              name={`familyDetails.${index}.ddlBirthState`}
                                               value={
-                                                values.experienceDetails[index]
-                                                  .ddlState
+                                                values.familyDetails[index]
+                                                  .ddlBirthState
                                               }
                                               onChange={handleChange}
                                               onBlur={handleBlur}
                                               error={Boolean(
                                                 getIn(
                                                   touched,
-                                                  `experienceDetails.${index}.ddlState`
+                                                  `familyDetails.${index}.ddlBirthState`
                                                 ) &&
                                                   getIn(
                                                     errors,
-                                                    `experienceDetails.${index}.ddlState`
+                                                    `familyDetails.${index}.ddlBirthState`
                                                   )
                                               )}
                                               helperText={
                                                 getIn(
                                                   touched,
-                                                  `experienceDetails.${index}.ddlState`
+                                                  `familyDetails.${index}.ddlBirthState`
                                                 ) &&
                                                 getIn(
                                                   errors,
-                                                  `experienceDetails.${index}.ddlState`
+                                                  `familyDetails.${index}.ddlBirthState`
                                                 )
                                               }
                                             >
@@ -3496,80 +2801,34 @@ const CreateEmployee = (): JSX.Element => {
                                             </SelectInput>
                                           </Grid>
                                           <Grid item xs={12} sm={6} md={6}>
-                                            <SelectInput
-                                              label="Employment Type"
-                                              name={`experienceDetails.${index}.ddlEmploymentType`}
-                                              value={
-                                                values.experienceDetails[index]
-                                                  .ddlEmploymentType
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `experienceDetails.${index}.ddlEmploymentType`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `experienceDetails.${index}.ddlEmploymentType`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `experienceDetails.${index}.ddlEmploymentType`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `experienceDetails.${index}.ddlEmploymentType`
-                                                )
-                                              }
-                                            >
-                                              <MenuItem key="-1" value="">
-                                                - None -
-                                              </MenuItem>
-                                              {employeeProfessionalDetails.employmentType.map(
-                                                (option) => (
-                                                  <MenuItem
-                                                    key={option.id}
-                                                    value={option.value}
-                                                  >
-                                                    {option.name}
-                                                  </MenuItem>
-                                                )
-                                              )}
-                                            </SelectInput>
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
                                             <TextInput
                                               fullWidth
-                                              label="Supervisor Name"
-                                              name={`experienceDetails.${index}.txtSupervisorName`}
+                                              label="Birth Location"
+                                              name={`familyDetails.${index}.txtBirthLocation`}
                                               value={
-                                                values.experienceDetails[index]
-                                                  .txtSupervisorName
+                                                values.familyDetails[index]
+                                                  .txtBirthLocation
                                               }
                                               onChange={handleChange}
                                               onBlur={handleBlur}
                                               error={Boolean(
                                                 getIn(
                                                   touched,
-                                                  `experienceDetails.${index}.txtSupervisorName`
+                                                  `familyDetails.${index}.txtBirthLocation`
                                                 ) &&
                                                   getIn(
                                                     errors,
-                                                    `experienceDetails.${index}.txtSupervisorName`
+                                                    `familyDetails.${index}.txtBirthLocation`
                                                   )
                                               )}
                                               helperText={
                                                 getIn(
                                                   touched,
-                                                  `experienceDetails.${index}.txtSupervisorName`
+                                                  `familyDetails.${index}.txtBirthLocation`
                                                 ) &&
                                                 getIn(
                                                   errors,
-                                                  `experienceDetails.${index}.txtSupervisorName`
+                                                  `familyDetails.${index}.txtBirthLocation`
                                                 )
                                               }
                                             />
@@ -3577,33 +2836,66 @@ const CreateEmployee = (): JSX.Element => {
                                           <Grid item xs={12} sm={6} md={6}>
                                             <TextInput
                                               fullWidth
-                                              label="Supervisor Phone No"
-                                              type="number"
-                                              name={`experienceDetails.${index}.txtSupervisorPhone`}
+                                              label="Occupation"
+                                              name={`familyDetails.${index}.txtOccupation`}
                                               value={
-                                                values.experienceDetails[index]
-                                                  .txtSupervisorPhone
+                                                values.familyDetails[index]
+                                                  .txtOccupation
                                               }
                                               onChange={handleChange}
                                               onBlur={handleBlur}
                                               error={Boolean(
                                                 getIn(
                                                   touched,
-                                                  `experienceDetails.${index}.txtSupervisorPhone`
+                                                  `familyDetails.${index}.txtOccupation`
                                                 ) &&
                                                   getIn(
                                                     errors,
-                                                    `experienceDetails.${index}.txtSupervisorPhone`
+                                                    `familyDetails.${index}.txtOccupation`
                                                   )
                                               )}
                                               helperText={
                                                 getIn(
                                                   touched,
-                                                  `experienceDetails.${index}.txtSupervisorPhone`
+                                                  `familyDetails.${index}.txtOccupation`
                                                 ) &&
                                                 getIn(
                                                   errors,
-                                                  `experienceDetails.${index}.txtSupervisorPhone`
+                                                  `familyDetails.${index}.txtOccupation`
+                                                )
+                                              }
+                                            />
+                                          </Grid>
+                                          <Grid item xs={12} sm={6} md={6}>
+                                            <TextInput
+                                              fullWidth
+                                              label="Phone"
+                                              name={`familyDetails.${index}.txtPhone`}
+                                              type="number"
+                                              value={
+                                                values.familyDetails[index]
+                                                  .txtPhone
+                                              }
+                                              onChange={handleChange}
+                                              onBlur={handleBlur}
+                                              error={Boolean(
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.txtPhone`
+                                                ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `familyDetails.${index}.txtPhone`
+                                                  )
+                                              )}
+                                              helperText={
+                                                getIn(
+                                                  touched,
+                                                  `familyDetails.${index}.txtPhone`
+                                                ) &&
+                                                getIn(
+                                                  errors,
+                                                  `familyDetails.${index}.txtPhone`
                                                 )
                                               }
                                             />
@@ -3611,1004 +2903,1304 @@ const CreateEmployee = (): JSX.Element => {
                                         </Grid>
                                       </AccordionDetails>
                                     </Accordion>
-                                  )
-                                )}
-                              </div>
-                            )}
-                          </FieldArray>
-                        )}
+                                  ))}
+                                </div>
+                              )}
+                            </FieldArray>
+                          )}
+                          {activeStep === 5 && (
+                            <FieldArray name="educationDetails">
+                              {({ push, remove }) => (
+                                <div
+                                  style={{
+                                    padding: '20px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between'
+                                  }}
+                                >
+                                  <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={() =>
+                                      push(initialValuesEducationDetailsEntries)
+                                    }
+                                    sx={{ ml: 80, mb: 2 }}
+                                  >
+                                    Add Education
+                                  </Button>
+                                  {values.educationDetails.map(
+                                    (education, index) => (
+                                      <Accordion key={index} sx={{ mb: 2 }}>
+                                        <AccordionSummary
+                                          expandIcon={<ExpandMoreIcon />}
+                                          aria-controls={`education-${index}-content`}
+                                          id={`education-${index}-header`}
+                                        >
+                                          <Grid
+                                            container
+                                            alignItems="center"
+                                            spacing={2}
+                                          >
+                                            <Grid item xs={11}>
+                                              <Typography variant="subtitle1">
+                                                Education #{index + 1}
+                                                {education.ddlCourse &&
+                                                  ` - ${education.ddlCourse}`}
+                                                {education.txtDegreeSpecialization &&
+                                                  ` (${education.txtDegreeSpecialization})`}
+                                              </Typography>
+                                            </Grid>
+                                            <Grid item xs={1}>
+                                              {index > 0 && (
+                                                <IconButton
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    remove(index);
+                                                  }}
+                                                  size="small"
+                                                >
+                                                  <DeleteIcon />
+                                                </IconButton>
+                                              )}
+                                            </Grid>
+                                          </Grid>
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                          <Grid container spacing={2}>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <SelectInput
+                                                label="Course"
+                                                name={`educationDetails.${index}.ddlCourse`}
+                                                value={
+                                                  values.educationDetails[index]
+                                                    .ddlCourse
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.ddlCourse`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `educationDetails.${index}.ddlCourse`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.ddlCourse`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `educationDetails.${index}.ddlCourse`
+                                                  )
+                                                }
+                                              >
+                                                <MenuItem key="-1" value="">
+                                                  - None -
+                                                </MenuItem>
+                                                {employeeEducationDetails.course.map(
+                                                  (option) => (
+                                                    <MenuItem
+                                                      key={option.id}
+                                                      value={option.value}
+                                                    >
+                                                      {option.name}
+                                                    </MenuItem>
+                                                  )
+                                                )}
+                                              </SelectInput>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Degree Specialization"
+                                                name={`educationDetails.${index}.txtDegreeSpecialization`}
+                                                value={
+                                                  values.educationDetails[index]
+                                                    .txtDegreeSpecialization
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.txtDegreeSpecialization`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `educationDetails.${index}.txtDegreeSpecialization`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.txtDegreeSpecialization`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `educationDetails.${index}.txtDegreeSpecialization`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Institute Name"
+                                                name={`educationDetails.${index}.txtInstituteName`}
+                                                value={
+                                                  values.educationDetails[index]
+                                                    .txtInstituteName
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.txtInstituteName`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `educationDetails.${index}.txtInstituteName`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.txtInstituteName`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `educationDetails.${index}.txtInstituteName`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <LocalizationProvider
+                                                dateAdapter={AdapterDayjs}
+                                              >
+                                                <DatePicker
+                                                  openTo="day"
+                                                  inputFormat="DD/MM/YYYY"
+                                                  value={
+                                                    values.educationDetails[
+                                                      index
+                                                    ].txtFromDate
+                                                  }
+                                                  onChange={(newValue) => {
+                                                    setFieldValue(
+                                                      `educationDetails.${index}.txtFromDate`,
+                                                      newValue
+                                                    );
+                                                  }}
+                                                  renderInput={(params) => (
+                                                    <CustomField
+                                                      name={`educationDetails.${index}.txtFromDate`}
+                                                      label="From Date"
+                                                      error={Boolean(
+                                                        getIn(
+                                                          touched,
+                                                          `educationDetails.${index}.txtFromDate`
+                                                        ) &&
+                                                          getIn(
+                                                            errors,
+                                                            `educationDetails.${index}.txtFromDate`
+                                                          )
+                                                      )}
+                                                      helperText={
+                                                        getIn(
+                                                          touched,
+                                                          `educationDetails.${index}.txtFromDate`
+                                                        ) &&
+                                                        getIn(
+                                                          errors,
+                                                          `educationDetails.${index}.txtFromDate`
+                                                        )
+                                                      }
+                                                    >
+                                                      <TextField
+                                                        {...params}
+                                                        fullWidth
+                                                        size="medium"
+                                                        name={`educationDetails.${index}.txtFromDate`}
+                                                        value={
+                                                          values
+                                                            .educationDetails[
+                                                            index
+                                                          ].txtFromDate
+                                                        }
+                                                        error={Boolean(
+                                                          getIn(
+                                                            touched,
+                                                            `educationDetails.${index}.txtFromDate`
+                                                          ) &&
+                                                            getIn(
+                                                              errors,
+                                                              `educationDetails.${index}.txtFromDate`
+                                                            )
+                                                        )}
+                                                      />
+                                                    </CustomField>
+                                                  )}
+                                                />
+                                              </LocalizationProvider>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <LocalizationProvider
+                                                dateAdapter={AdapterDayjs}
+                                              >
+                                                <DatePicker
+                                                  openTo="day"
+                                                  inputFormat="DD/MM/YYYY"
+                                                  value={
+                                                    values.educationDetails[
+                                                      index
+                                                    ].txtToDate
+                                                  }
+                                                  onChange={(newValue) => {
+                                                    setFieldValue(
+                                                      `educationDetails.${index}.txtToDate`,
+                                                      newValue
+                                                    );
+                                                  }}
+                                                  renderInput={(params) => (
+                                                    <CustomField
+                                                      name={`educationDetails.${index}.txtToDate`}
+                                                      label="To Date"
+                                                      error={Boolean(
+                                                        getIn(
+                                                          touched,
+                                                          `educationDetails.${index}.txtToDate`
+                                                        ) &&
+                                                          getIn(
+                                                            errors,
+                                                            `educationDetails.${index}.txtToDate`
+                                                          )
+                                                      )}
+                                                      helperText={
+                                                        getIn(
+                                                          touched,
+                                                          `educationDetails.${index}.txtToDate`
+                                                        ) &&
+                                                        getIn(
+                                                          errors,
+                                                          `educationDetails.${index}.txtToDate`
+                                                        )
+                                                      }
+                                                    >
+                                                      <TextField
+                                                        {...params}
+                                                        fullWidth
+                                                        size="medium"
+                                                        name={`educationDetails.${index}.txtToDate`}
+                                                        value={
+                                                          values
+                                                            .educationDetails[
+                                                            index
+                                                          ].txtToDate
+                                                        }
+                                                        error={Boolean(
+                                                          getIn(
+                                                            touched,
+                                                            `educationDetails.${index}.txtToDate`
+                                                          ) &&
+                                                            getIn(
+                                                              errors,
+                                                              `educationDetails.${index}.txtToDate`
+                                                            )
+                                                        )}
+                                                      />
+                                                    </CustomField>
+                                                  )}
+                                                />
+                                              </LocalizationProvider>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <SelectInput
+                                                label="Status"
+                                                name={`educationDetails.${index}.ddlStatus`}
+                                                value={
+                                                  values.educationDetails[index]
+                                                    .ddlStatus
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.ddlStatus`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `educationDetails.${index}.ddlStatus`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.ddlStatus`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `educationDetails.${index}.ddlStatus`
+                                                  )
+                                                }
+                                              >
+                                                <MenuItem key="-1" value="">
+                                                  - None -
+                                                </MenuItem>
+                                                {employeeEducationDetails.status.map(
+                                                  (option) => (
+                                                    <MenuItem
+                                                      key={option.id}
+                                                      value={option.value}
+                                                    >
+                                                      {option.name}
+                                                    </MenuItem>
+                                                  )
+                                                )}
+                                              </SelectInput>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <SelectInput
+                                                label="Study Mode"
+                                                name={`educationDetails.${index}.ddlStudyMode`}
+                                                value={
+                                                  values.educationDetails[index]
+                                                    .ddlStudyMode
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.ddlStudyMode`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `educationDetails.${index}.ddlStudyMode`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.ddlStudyMode`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `educationDetails.${index}.ddlStudyMode`
+                                                  )
+                                                }
+                                              >
+                                                <MenuItem key="-1" value="">
+                                                  - None -
+                                                </MenuItem>
+                                                {employeeEducationDetails.studyMode.map(
+                                                  (option) => (
+                                                    <MenuItem
+                                                      key={option.id}
+                                                      value={option.value}
+                                                    >
+                                                      {option.name}
+                                                    </MenuItem>
+                                                  )
+                                                )}
+                                              </SelectInput>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Percentage"
+                                                name={`educationDetails.${index}.txtPercentage`}
+                                                type="number"
+                                                value={
+                                                  values.educationDetails[index]
+                                                    .txtPercentage
+                                                }
+                                                inputProps={{
+                                                  min: 0,
+                                                  max: 100
+                                                }}
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.txtPercentage`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `educationDetails.${index}.txtPercentage`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `educationDetails.${index}.txtPercentage`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `educationDetails.${index}.txtPercentage`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                          </Grid>
+                                        </AccordionDetails>
+                                      </Accordion>
+                                    )
+                                  )}
+                                </div>
+                              )}
+                            </FieldArray>
+                          )}
+                          {activeStep === 6 && (
+                            <FieldArray name="emergencyContactDetails">
+                              {({ push, remove }) => (
+                                <div
+                                  style={{
+                                    padding: '20px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between'
+                                  }}
+                                >
+                                  <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={() =>
+                                      push(
+                                        initialValuesEmergencyContactDetailsEntries
+                                      )
+                                    }
+                                    sx={{ ml: 80, mb: 2 }}
+                                  >
+                                    Add Contact
+                                  </Button>
+                                  {values.emergencyContactDetails.map(
+                                    (contact, index) => (
+                                      <Accordion key={index} sx={{ mb: 2 }}>
+                                        <AccordionSummary
+                                          expandIcon={<ExpandMoreIcon />}
+                                          aria-controls={`emergency-contact-${index}-content`}
+                                          id={`emergency-contact-${index}-header`}
+                                        >
+                                          <Grid
+                                            container
+                                            alignItems="center"
+                                            spacing={2}
+                                          >
+                                            <Grid item xs={11}>
+                                              <Typography variant="subtitle1">
+                                                Emergency Contact #{index + 1}
+                                                {contact.txtContactName &&
+                                                  ` - ${contact.txtContactName}`}
+                                                {contact.ddlContactRelation &&
+                                                  ` (${contact.ddlContactRelation})`}
+                                              </Typography>
+                                            </Grid>
+                                            <Grid item xs={1}>
+                                              {index > 0 && (
+                                                <IconButton
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    remove(index);
+                                                  }}
+                                                  size="small"
+                                                >
+                                                  <DeleteIcon />
+                                                </IconButton>
+                                              )}
+                                            </Grid>
+                                          </Grid>
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                          <Grid container spacing={2}>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Contact Name"
+                                                name={`emergencyContactDetails.${index}.txtContactName`}
+                                                value={
+                                                  values
+                                                    .emergencyContactDetails[
+                                                    index
+                                                  ].txtContactName
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `emergencyContactDetails.${index}.txtContactName`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `emergencyContactDetails.${index}.txtContactName`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `emergencyContactDetails.${index}.txtContactName`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `emergencyContactDetails.${index}.txtContactName`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Contact Address"
+                                                name={`emergencyContactDetails.${index}.txtContactAddress`}
+                                                multiline
+                                                rows={3}
+                                                value={
+                                                  values
+                                                    .emergencyContactDetails[
+                                                    index
+                                                  ].txtContactAddress
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `emergencyContactDetails.${index}.txtContactAddress`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `emergencyContactDetails.${index}.txtContactAddress`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `emergencyContactDetails.${index}.txtContactAddress`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `emergencyContactDetails.${index}.txtContactAddress`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <SelectInput
+                                                label="Contact Relation"
+                                                name={`emergencyContactDetails.${index}.ddlContactRelation`}
+                                                value={
+                                                  values
+                                                    .emergencyContactDetails[
+                                                    index
+                                                  ].ddlContactRelation
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `emergencyContactDetails.${index}.ddlContactRelation`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `emergencyContactDetails.${index}.ddlContactRelation`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `emergencyContactDetails.${index}.ddlContactRelation`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `emergencyContactDetails.${index}.ddlContactRelation`
+                                                  )
+                                                }
+                                              >
+                                                <MenuItem key="-1" value="">
+                                                  - None -
+                                                </MenuItem>
+                                                {employeeEmergencyContactDetails.contactRelation.map(
+                                                  (option) => (
+                                                    <MenuItem
+                                                      key={option.id}
+                                                      value={option.value}
+                                                    >
+                                                      {option.name}
+                                                    </MenuItem>
+                                                  )
+                                                )}
+                                              </SelectInput>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Phone Number"
+                                                name={`emergencyContactDetails.${index}.txtPhone`}
+                                                type="number"
+                                                value={
+                                                  values
+                                                    .emergencyContactDetails[
+                                                    index
+                                                  ].txtPhone
+                                                }
+                                                inputProps={{ maxLength: 10 }}
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `emergencyContactDetails.${index}.txtPhone`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `emergencyContactDetails.${index}.txtPhone`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `emergencyContactDetails.${index}.txtPhone`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `emergencyContactDetails.${index}.txtPhone`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                          </Grid>
+                                        </AccordionDetails>
+                                      </Accordion>
+                                    )
+                                  )}
+                                </div>
+                              )}
+                            </FieldArray>
+                          )}
+                          {activeStep === 7 && (
+                            <FieldArray name="experienceDetails">
+                              {({ push, remove }) => (
+                                <div
+                                  style={{
+                                    padding: '20px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between'
+                                  }}
+                                >
+                                  <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={() =>
+                                      push(
+                                        initialValuesExperienceDetailsEntries
+                                      )
+                                    }
+                                    sx={{ ml: 80, mb: 2 }}
+                                  >
+                                    Add Experience
+                                  </Button>
+                                  {values.experienceDetails.map(
+                                    (experience, index) => (
+                                      <Accordion key={index} sx={{ mb: 2 }}>
+                                        <AccordionSummary
+                                          expandIcon={<ExpandMoreIcon />}
+                                          aria-controls={`experience-${index}-content`}
+                                          id={`experience-${index}-header`}
+                                        >
+                                          <Grid
+                                            container
+                                            alignItems="center"
+                                            spacing={2}
+                                          >
+                                            <Grid item xs={11}>
+                                              <Typography variant="subtitle1">
+                                                Experience #{index + 1}
+                                                {experience.txtCompanyName &&
+                                                  ` - ${experience.txtCompanyName}`}
+                                                {experience.txtJobTitle &&
+                                                  ` (${experience.txtJobTitle})`}
+                                              </Typography>
+                                            </Grid>
+                                            <Grid item xs={1}>
+                                              {index > 0 && (
+                                                <IconButton
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    remove(index);
+                                                  }}
+                                                  size="small"
+                                                >
+                                                  <DeleteIcon />
+                                                </IconButton>
+                                              )}
+                                            </Grid>
+                                          </Grid>
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                          <Grid container spacing={2}>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Company Name"
+                                                name={`experienceDetails.${index}.txtCompanyName`}
+                                                value={
+                                                  values.experienceDetails[
+                                                    index
+                                                  ].txtCompanyName
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtCompanyName`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `experienceDetails.${index}.txtCompanyName`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtCompanyName`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `experienceDetails.${index}.txtCompanyName`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Employee ID"
+                                                name={`experienceDetails.${index}.txtEmployeeId`}
+                                                value={
+                                                  values.experienceDetails[
+                                                    index
+                                                  ].txtEmployeeId
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtEmployeeId`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `experienceDetails.${index}.txtEmployeeId`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtEmployeeId`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `experienceDetails.${index}.txtEmployeeId`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Job Title"
+                                                name={`experienceDetails.${index}.txtJobTitle`}
+                                                value={
+                                                  values.experienceDetails[
+                                                    index
+                                                  ].txtJobTitle
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtJobTitle`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `experienceDetails.${index}.txtJobTitle`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtJobTitle`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `experienceDetails.${index}.txtJobTitle`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <LocalizationProvider
+                                                dateAdapter={AdapterDayjs}
+                                              >
+                                                <DatePicker
+                                                  openTo="day"
+                                                  inputFormat="DD/MM/YYYY"
+                                                  value={
+                                                    values.experienceDetails[
+                                                      index
+                                                    ].txtStartDate
+                                                  }
+                                                  onChange={(newValue) => {
+                                                    setFieldValue(
+                                                      `experienceDetails.${index}.txtStartDate`,
+                                                      newValue
+                                                    );
+                                                  }}
+                                                  renderInput={(params) => (
+                                                    <CustomField
+                                                      name={`experienceDetails.${index}.txtStartDate`}
+                                                      label="Start Date"
+                                                      error={Boolean(
+                                                        getIn(
+                                                          touched,
+                                                          `experienceDetails.${index}.txtStartDate`
+                                                        ) &&
+                                                          getIn(
+                                                            errors,
+                                                            `experienceDetails.${index}.txtStartDate`
+                                                          )
+                                                      )}
+                                                      helperText={
+                                                        getIn(
+                                                          touched,
+                                                          `experienceDetails.${index}.txtStartDate`
+                                                        ) &&
+                                                        getIn(
+                                                          errors,
+                                                          `experienceDetails.${index}.txtStartDate`
+                                                        )
+                                                      }
+                                                    >
+                                                      <TextField
+                                                        {...params}
+                                                        fullWidth
+                                                        size="medium"
+                                                        name={`experienceDetails.${index}.txtStartDate`}
+                                                        value={
+                                                          values
+                                                            .experienceDetails[
+                                                            index
+                                                          ].txtStartDate
+                                                        }
+                                                        error={Boolean(
+                                                          getIn(
+                                                            touched,
+                                                            `experienceDetails.${index}.txtStartDate`
+                                                          ) &&
+                                                            getIn(
+                                                              errors,
+                                                              `experienceDetails.${index}.txtStartDate`
+                                                            )
+                                                        )}
+                                                      />
+                                                    </CustomField>
+                                                  )}
+                                                />
+                                              </LocalizationProvider>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <LocalizationProvider
+                                                dateAdapter={AdapterDayjs}
+                                              >
+                                                <DatePicker
+                                                  openTo="day"
+                                                  inputFormat="DD/MM/YYYY"
+                                                  value={
+                                                    values.experienceDetails[
+                                                      index
+                                                    ].txtEndDate
+                                                  }
+                                                  onChange={(newValue) => {
+                                                    setFieldValue(
+                                                      `experienceDetails.${index}.txtEndDate`,
+                                                      newValue
+                                                    );
+                                                  }}
+                                                  renderInput={(params) => (
+                                                    <CustomField
+                                                      name={`experienceDetails.${index}.txtEndDate`}
+                                                      label="End Date"
+                                                      error={Boolean(
+                                                        getIn(
+                                                          touched,
+                                                          `experienceDetails.${index}.txtEndDate`
+                                                        ) &&
+                                                          getIn(
+                                                            errors,
+                                                            `experienceDetails.${index}.txtEndDate`
+                                                          )
+                                                      )}
+                                                      helperText={
+                                                        getIn(
+                                                          touched,
+                                                          `experienceDetails.${index}.txtEndDate`
+                                                        ) &&
+                                                        getIn(
+                                                          errors,
+                                                          `experienceDetails.${index}.txtEndDate`
+                                                        )
+                                                      }
+                                                    >
+                                                      <TextField
+                                                        {...params}
+                                                        fullWidth
+                                                        size="medium"
+                                                        name={`experienceDetails.${index}.txtEndDate`}
+                                                        value={
+                                                          values
+                                                            .experienceDetails[
+                                                            index
+                                                          ].txtEndDate
+                                                        }
+                                                        error={Boolean(
+                                                          getIn(
+                                                            touched,
+                                                            `experienceDetails.${index}.txtEndDate`
+                                                          ) &&
+                                                            getIn(
+                                                              errors,
+                                                              `experienceDetails.${index}.txtEndDate`
+                                                            )
+                                                        )}
+                                                      />
+                                                    </CustomField>
+                                                  )}
+                                                />
+                                              </LocalizationProvider>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <SelectInput
+                                                label="Select Country"
+                                                name={`experienceDetails.${index}.ddlCountry`}
+                                                value={
+                                                  values.experienceDetails[
+                                                    index
+                                                  ].ddlCountry
+                                                }
+                                                onChange={(e) => {
+                                                  handleChange(e);
+                                                  handleCountryChange(
+                                                    e.target.value as string
+                                                  );
+                                                }}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.ddlCountry`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `experienceDetails.${index}.ddlCountry`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.ddlCountry`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `experienceDetails.${index}.ddlCountry`
+                                                  )
+                                                }
+                                              >
+                                                <MenuItem key="-1" value="">
+                                                  - None -
+                                                </MenuItem>
+                                                {countries.map((option, i) => (
+                                                  <MenuItem
+                                                    key={i}
+                                                    value={option.alpha2Code}
+                                                  >
+                                                    {option.country}
+                                                  </MenuItem>
+                                                ))}
+                                              </SelectInput>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="City"
+                                                name={`experienceDetails.${index}.txtCity`}
+                                                value={
+                                                  values.experienceDetails[
+                                                    index
+                                                  ].txtCity
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtCity`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `experienceDetails.${index}.txtCity`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtCity`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `experienceDetails.${index}.txtCity`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <SelectInput
+                                                label="Select State"
+                                                name={`experienceDetails.${index}.ddlState`}
+                                                value={
+                                                  values.experienceDetails[
+                                                    index
+                                                  ].ddlState
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.ddlState`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `experienceDetails.${index}.ddlState`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.ddlState`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `experienceDetails.${index}.ddlState`
+                                                  )
+                                                }
+                                              >
+                                                <MenuItem key="-1" value="">
+                                                  - None -
+                                                </MenuItem>
+                                                {states.map((option, i) => (
+                                                  <MenuItem
+                                                    key={i}
+                                                    value={option}
+                                                  >
+                                                    {option}
+                                                  </MenuItem>
+                                                ))}
+                                              </SelectInput>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <SelectInput
+                                                label="Employment Type"
+                                                name={`experienceDetails.${index}.ddlEmploymentType`}
+                                                value={
+                                                  values.experienceDetails[
+                                                    index
+                                                  ].ddlEmploymentType
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.ddlEmploymentType`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `experienceDetails.${index}.ddlEmploymentType`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.ddlEmploymentType`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `experienceDetails.${index}.ddlEmploymentType`
+                                                  )
+                                                }
+                                              >
+                                                <MenuItem key="-1" value="">
+                                                  - None -
+                                                </MenuItem>
+                                                {employeeProfessionalDetails.employmentType.map(
+                                                  (option) => (
+                                                    <MenuItem
+                                                      key={option.id}
+                                                      value={option.value}
+                                                    >
+                                                      {option.name}
+                                                    </MenuItem>
+                                                  )
+                                                )}
+                                              </SelectInput>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Supervisor Name"
+                                                name={`experienceDetails.${index}.txtSupervisorName`}
+                                                value={
+                                                  values.experienceDetails[
+                                                    index
+                                                  ].txtSupervisorName
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtSupervisorName`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `experienceDetails.${index}.txtSupervisorName`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtSupervisorName`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `experienceDetails.${index}.txtSupervisorName`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid item xs={12} sm={6} md={6}>
+                                              <TextInput
+                                                fullWidth
+                                                label="Supervisor Phone No"
+                                                type="number"
+                                                name={`experienceDetails.${index}.txtSupervisorPhone`}
+                                                value={
+                                                  values.experienceDetails[
+                                                    index
+                                                  ].txtSupervisorPhone
+                                                }
+                                                onChange={handleChange}
+                                                onBlur={handleBlur}
+                                                error={Boolean(
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtSupervisorPhone`
+                                                  ) &&
+                                                    getIn(
+                                                      errors,
+                                                      `experienceDetails.${index}.txtSupervisorPhone`
+                                                    )
+                                                )}
+                                                helperText={
+                                                  getIn(
+                                                    touched,
+                                                    `experienceDetails.${index}.txtSupervisorPhone`
+                                                  ) &&
+                                                  getIn(
+                                                    errors,
+                                                    `experienceDetails.${index}.txtSupervisorPhone`
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                          </Grid>
+                                        </AccordionDetails>
+                                      </Accordion>
+                                    )
+                                  )}
+                                </div>
+                              )}
+                            </FieldArray>
+                          )}
+                          {activeStep === 8 && (
+                            <DocumentUploadStep
+                              values={values}
+                              setFieldValue={setFieldValue}
+                              documentTypes={documentTypes}
+                              userId={userId}
+                              errors={errors}
+                              touched={touched}
+                            />
+                          )}
 
-                        {/* {activeStep === 3 && (
-                          <CardContent>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select Relation Type"
-                                  name="ddlRelationType"
-                                  value={values.ddlRelationType}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlRelationType &&
-                                      errors.ddlRelationType
-                                  )}
-                                  helperText={String(
-                                    touched.ddlRelationType &&
-                                      errors.ddlRelationType
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeeFamilyDetails.relationType.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Name"
-                                  name="txtName"
-                                  value={values.txtName}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtName && errors.txtName
-                                  )}
-                                  helperText={String(
-                                    touched.txtName && errors.txtName
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Age"
-                                  name="txtAge"
-                                  type="number"
-                                  value={values.txtAge}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtAge && errors.txtAge
-                                  )}
-                                  helperText={String(
-                                    touched.txtAge && errors.txtAge
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <LocalizationProvider
-                                  dateAdapter={AdapterDayjs}
-                                >
-                                  <DatePicker
-                                    openTo="day"
-                                    inputFormat="DD/MM/YYYY"
-                                    value={values.txtBirthDate}
-                                    onChange={(newValue: any) => {
-                                      setFieldValue('txtBirthDate', newValue);
-                                    }}
-                                    renderInput={(params: any) => (
-                                      <CustomField
-                                        name="txtBirthDate"
-                                        label="Birth Date"
-                                        error={Boolean(
-                                          touched.txtBirthDate &&
-                                            errors.txtBirthDate
-                                        )}
-                                        helperText={String(
-                                          touched.txtBirthDate &&
-                                            errors.txtBirthDate
-                                        )}
-                                      >
-                                        <TextField
-                                          {...params}
-                                          fullWidth
-                                          size="medium"
-                                          name="txtBirthDate"
-                                          value={values.txtBirthDate}
-                                          error={Boolean(
-                                            touched.txtBirthDate &&
-                                              errors.txtBirthDate
-                                          )}
-                                        />
-                                      </CustomField>
-                                    )}
-                                  />
-                                </LocalizationProvider>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select Birth Country"
-                                  name="ddlBirthCountry"
-                                  value={values.ddlBirthCountry}
-                                  onChange={(e) => {
-                                    handleChange(e);
-                                    handleCountryChange(
-                                      e.target.value as string
-                                    );
-                                  }}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlBirthCountry &&
-                                      errors.ddlBirthCountry
-                                  )}
-                                  helperText={String(
-                                    touched.ddlBirthCountry &&
-                                      errors.ddlBirthCountry
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {countries.map((option, i) => (
-                                    <MenuItem key={i} value={option.alpha2Code}>
-                                      {option.country}
-                                    </MenuItem>
-                                  ))}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select State"
-                                  name="ddlBirthState"
-                                  value={values.ddlBirthState}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlBirthState &&
-                                      errors.ddlBirthState
-                                  )}
-                                  helperText={String(
-                                    touched.ddlBirthState &&
-                                      errors.ddlBirthState
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {states.map((option, i) => (
-                                    <MenuItem key={i} value={option}>
-                                      {option}
-                                    </MenuItem>
-                                  ))}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Birth Location"
-                                  name="txtBirthLocation"
-                                  value={values.txtBirthLocation}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtBirthLocation &&
-                                      errors.txtBirthLocation
-                                  )}
-                                  helperText={String(
-                                    touched.txtBirthLocation &&
-                                      errors.txtBirthLocation
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Occupation"
-                                  name="txtOccupation"
-                                  value={values.txtOccupation}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtOccupation &&
-                                      errors.txtOccupation
-                                  )}
-                                  helperText={String(
-                                    touched.txtOccupation &&
-                                      errors.txtOccupation
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Phone No"
-                                  name="txtPhone"
-                                  value={values.txtPhone}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtPhone && errors.txtPhone
-                                  )}
-                                  helperText={String(
-                                    touched.txtPhone && errors.txtPhone
-                                  )}
-                                />
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        )}
-                        {activeStep === 4 && (
-                          <CardContent>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Course"
-                                  name="ddlCourse"
-                                  value={values.ddlCourse}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlCourse && errors.ddlCourse
-                                  )}
-                                  helperText={String(
-                                    touched.ddlCourse && errors.ddlCourse
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeeEducationDetails.course.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Degree Specialization"
-                                  name="txtDegreeSpecialization"
-                                  value={values.txtDegreeSpecialization}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtDegreeSpecialization &&
-                                      errors.txtDegreeSpecialization
-                                  )}
-                                  helperText={String(
-                                    touched.txtDegreeSpecialization &&
-                                      errors.txtDegreeSpecialization
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Institute Name"
-                                  name="txtInstituteName"
-                                  value={values.txtInstituteName}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtInstituteName &&
-                                      errors.txtInstituteName
-                                  )}
-                                  helperText={String(
-                                    touched.txtInstituteName &&
-                                      errors.txtInstituteName
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <LocalizationProvider
-                                  dateAdapter={AdapterDayjs}
-                                >
-                                  <DatePicker
-                                    openTo="day"
-                                    inputFormat="DD/MM/YYYY"
-                                    value={values.txtFromDate}
-                                    onChange={(newValue: any) => {
-                                      setFieldValue('txtFromDate', newValue);
-                                    }}
-                                    renderInput={(params: any) => (
-                                      <CustomField
-                                        name="txtFromDate"
-                                        label="From Date"
-                                        error={Boolean(
-                                          touched.txtFromDate &&
-                                            errors.txtFromDate
-                                        )}
-                                        helperText={String(
-                                          touched.txtFromDate &&
-                                            errors.txtFromDate
-                                        )}
-                                      >
-                                        <TextField
-                                          {...params}
-                                          fullWidth
-                                          size="medium"
-                                          name="txtFromDate"
-                                          value={values.txtFromDate}
-                                          error={Boolean(
-                                            touched.txtFromDate &&
-                                              errors.txtFromDate
-                                          )}
-                                        />
-                                      </CustomField>
-                                    )}
-                                  />
-                                </LocalizationProvider>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <LocalizationProvider
-                                  dateAdapter={AdapterDayjs}
-                                >
-                                  <DatePicker
-                                    openTo="day"
-                                    inputFormat="DD/MM/YYYY"
-                                    value={values.txtToDate}
-                                    onChange={(newValue: any) => {
-                                      setFieldValue('txtToDate', newValue);
-                                    }}
-                                    renderInput={(params: any) => (
-                                      <CustomField
-                                        name="txtToDate"
-                                        label="To Date"
-                                        error={Boolean(
-                                          touched.txtToDate && errors.txtToDate
-                                        )}
-                                        helperText={String(
-                                          touched.txtToDate && errors.txtToDate
-                                        )}
-                                      >
-                                        <TextField
-                                          {...params}
-                                          fullWidth
-                                          size="medium"
-                                          name="txtToDate"
-                                          value={values.txtToDate}
-                                          error={Boolean(
-                                            touched.txtToDate &&
-                                              errors.txtToDate
-                                          )}
-                                        />
-                                      </CustomField>
-                                    )}
-                                  />
-                                </LocalizationProvider>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Status"
-                                  name="ddlStatus"
-                                  value={values.ddlStatus}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlStatus && errors.ddlStatus
-                                  )}
-                                  helperText={String(
-                                    touched.ddlStatus && errors.ddlStatus
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeeEducationDetails.status.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Study Mode"
-                                  name="ddlStudyMode"
-                                  value={values.ddlStudyMode}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlStudyMode && errors.ddlStudyMode
-                                  )}
-                                  helperText={String(
-                                    touched.ddlStudyMode && errors.ddlStudyMode
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeeEducationDetails.studyMode.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Percentage"
-                                  name="txtPercentage"
-                                  type="number"
-                                  value={values.txtPercentage}
-                                  inputProps={{ min: 0, max: 100 }}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtPercentage &&
-                                      errors.txtPercentage
-                                  )}
-                                  helperText={String(
-                                    touched.txtPercentage &&
-                                      errors.txtPercentage
-                                  )}
-                                />
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        )}
-                        {activeStep === 5 && (
-                          <CardContent>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Contact Name"
-                                  name="txtContactName"
-                                  value={values.txtContactName}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtContactName &&
-                                      errors.txtContactName
-                                  )}
-                                  helperText={String(
-                                    touched.txtContactName &&
-                                      errors.txtContactName
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Contact Address"
-                                  name="txtContactAddress"
-                                  value={values.txtContactAddress}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtContactAddress &&
-                                      errors.txtContactAddress
-                                  )}
-                                  helperText={String(
-                                    touched.txtContactAddress &&
-                                      errors.txtContactAddress
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Contact Relation"
-                                  name="ddlContactRelation"
-                                  value={values.ddlContactRelation}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlContactRelation &&
-                                      errors.ddlContactRelation
-                                  )}
-                                  helperText={String(
-                                    touched.ddlContactRelation &&
-                                      errors.ddlContactRelation
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeeEmergencyContactDetails.contactRelation.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Phone Number"
-                                  name="txtPhone"
-                                  type="number"
-                                  value={values.txtPhone}
-                                  inputProps={{ maxLength: 10 }}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtPhone && errors.txtPhone
-                                  )}
-                                  helperText={String(
-                                    touched.txtPhone && errors.txtPhone
-                                  )}
-                                />
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        )}
-                        {activeStep === 6 && (
-                          <CardContent>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Employee Code"
-                                  name="txtEmployeeCode"
-                                  value={values.txtEmployeeCode}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtEmployeeCode &&
-                                      errors.txtEmployeeCode
-                                  )}
-                                  helperText={String(
-                                    touched.txtEmployeeCode &&
-                                      errors.txtEmployeeCode
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select Designation"
-                                  name="ddlDesignation"
-                                  value={values.ddlDesignation}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlDesignation &&
-                                      errors.ddlDesignation
-                                  )}
-                                  helperText={String(
-                                    touched.ddlDesignation &&
-                                      errors.ddlDesignation
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {designations.map((option: any) => (
-                                    <MenuItem
-                                      key={option.id}
-                                      value={option.value}
-                                    >
-                                      {option.name}
-                                    </MenuItem>
-                                  ))}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <LocalizationProvider
-                                  dateAdapter={AdapterDayjs}
-                                >
-                                  <DatePicker
-                                    openTo="day"
-                                    inputFormat="DD/MM/YYYY"
-                                    value={values.txtJoinDate}
-                                    onChange={(newValue: any) => {
-                                      setFieldValue('txtJoinDate', newValue);
-                                    }}
-                                    renderInput={(params: any) => (
-                                      <CustomField
-                                        name="txtJoinDate"
-                                        label="Join Date"
-                                        error={Boolean(
-                                          touched.txtJoinDate &&
-                                            errors.txtJoinDate
-                                        )}
-                                        helperText={String(
-                                          touched.txtJoinDate &&
-                                            errors.txtJoinDate
-                                        )}
-                                      >
-                                        <TextField
-                                          {...params}
-                                          fullWidth
-                                          size="medium"
-                                          name="txtJoinDate"
-                                          value={values.txtJoinDate}
-                                          error={Boolean(
-                                            touched.txtJoinDate &&
-                                              errors.txtJoinDate
-                                          )}
-                                        />
-                                      </CustomField>
-                                    )}
-                                  />
-                                </LocalizationProvider>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Employment Type"
-                                  name="ddlEmploymentType"
-                                  value={values.ddlEmploymentType}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlEmploymentType &&
-                                      errors.ddlEmploymentType
-                                  )}
-                                  helperText={String(
-                                    touched.ddlEmploymentType &&
-                                      errors.ddlEmploymentType
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeeProfessionalDetails.employmentType.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Working Type"
-                                  name="ddlWorkingType"
-                                  value={values.ddlWorkingType}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlWorkingType &&
-                                      errors.ddlWorkingType
-                                  )}
-                                  helperText={String(
-                                    touched.ddlWorkingType &&
-                                      errors.ddlWorkingType
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeeProfessionalDetails.workingType.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        )}
-                        {activeStep === 7 && (
-                          <CardContent>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Company Name"
-                                  name="txtCompanyName"
-                                  value={values.txtCompanyName}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtCompanyName &&
-                                      errors.txtCompanyName
-                                  )}
-                                  helperText={String(
-                                    touched.txtCompanyName &&
-                                      errors.txtCompanyName
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Employee ID"
-                                  name="txtEmployeeId"
-                                  value={values.txtEmployeeId}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtEmployeeId &&
-                                      errors.txtEmployeeId
-                                  )}
-                                  helperText={String(
-                                    touched.txtEmployeeId &&
-                                      errors.txtEmployeeId
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Job Title"
-                                  name="txtJobTitle"
-                                  value={values.txtJobTitle}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtJobTitle && errors.txtJobTitle
-                                  )}
-                                  helperText={String(
-                                    touched.txtJobTitle && errors.txtJobTitle
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <LocalizationProvider
-                                  dateAdapter={AdapterDayjs}
-                                >
-                                  <DatePicker
-                                    openTo="day"
-                                    inputFormat="DD/MM/YYYY"
-                                    value={values.txtStartDate}
-                                    onChange={(newValue: any) => {
-                                      setFieldValue('txtStartDate', newValue);
-                                    }}
-                                    renderInput={(params: any) => (
-                                      <CustomField
-                                        name="txtStartDate"
-                                        label="Start Date"
-                                        error={Boolean(
-                                          touched.txtStartDate &&
-                                            errors.txtStartDate
-                                        )}
-                                        helperText={String(
-                                          touched.txtStartDate &&
-                                            errors.txtStartDate
-                                        )}
-                                      >
-                                        <TextField
-                                          {...params}
-                                          fullWidth
-                                          size="medium"
-                                          name="txtStartDate"
-                                          value={values.txtStartDate}
-                                          error={Boolean(
-                                            touched.txtStartDate &&
-                                              errors.txtStartDate
-                                          )}
-                                        />
-                                      </CustomField>
-                                    )}
-                                  />
-                                </LocalizationProvider>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <LocalizationProvider
-                                  dateAdapter={AdapterDayjs}
-                                >
-                                  <DatePicker
-                                    openTo="day"
-                                    inputFormat="DD/MM/YYYY"
-                                    value={values.txtEndDate}
-                                    onChange={(newValue: any) => {
-                                      setFieldValue('txtEndDate', newValue);
-                                    }}
-                                    renderInput={(params: any) => (
-                                      <CustomField
-                                        name="txtEndDate"
-                                        label="End Date"
-                                        error={Boolean(
-                                          touched.txtEndDate &&
-                                            errors.txtEndDate
-                                        )}
-                                        helperText={String(
-                                          touched.txtEndDate &&
-                                            errors.txtEndDate
-                                        )}
-                                      >
-                                        <TextField
-                                          {...params}
-                                          fullWidth
-                                          size="medium"
-                                          name="txtEndDate"
-                                          value={values.txtEndDate}
-                                          error={Boolean(
-                                            touched.txtEndDate &&
-                                              errors.txtEndDate
-                                          )}
-                                        />
-                                      </CustomField>
-                                    )}
-                                  />
-                                </LocalizationProvider>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select Country"
-                                  name="ddlCountry"
-                                  value={values.ddlCountry}
-                                  onChange={(e) => {
-                                    handleChange(e);
-                                    handleCountryChange(
-                                      e.target.value as string
-                                    );
-                                  }}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlCountry && errors.ddlCountry
-                                  )}
-                                  helperText={String(
-                                    touched.ddlCountry && errors.ddlCountry
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {countries.map((option, i) => (
-                                    <MenuItem key={i} value={option.alpha2Code}>
-                                      {option.country}
-                                    </MenuItem>
-                                  ))}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Select State"
-                                  name="ddlState"
-                                  value={values.ddlState}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlState && errors.ddlState
-                                  )}
-                                  helperText={String(
-                                    touched.ddlState && errors.ddlState
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {states.map((option, i) => (
-                                    <MenuItem key={i} value={option}>
-                                      {option}
-                                    </MenuItem>
-                                  ))}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="City"
-                                  name="txtCity"
-                                  value={values.txtCity}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtCity && errors.txtCity
-                                  )}
-                                  helperText={String(
-                                    touched.txtCity && errors.txtCity
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <SelectInput
-                                  label="Employment Type"
-                                  name="ddlEmploymentType"
-                                  value={values.ddlEmploymentType}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.ddlEmploymentType &&
-                                      errors.ddlEmploymentType
-                                  )}
-                                  helperText={String(
-                                    touched.ddlEmploymentType &&
-                                      errors.ddlEmploymentType
-                                  )}
-                                >
-                                  <MenuItem key="-1" value="">
-                                    - None -
-                                  </MenuItem>
-                                  {employeeProfessionalDetails.employmentType.map(
-                                    (option: any) => (
-                                      <MenuItem
-                                        key={option.id}
-                                        value={option.value}
-                                      >
-                                        {option.name}
-                                      </MenuItem>
-                                    )
-                                  )}
-                                </SelectInput>
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Supervisor Name"
-                                  name="txtSupervisorName"
-                                  value={values.txtSupervisorName}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtSupervisorName &&
-                                      errors.txtSupervisorName
-                                  )}
-                                  helperText={String(
-                                    touched.txtSupervisorName &&
-                                      errors.txtSupervisorName
-                                  )}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6} md={6}>
-                                <TextInput
-                                  fullWidth
-                                  label="Supervisor Phone No"
-                                  type="number"
-                                  name="txtSupervisorPhone"
-                                  value={values.txtSupervisorPhone}
-                                  onChange={handleChange}
-                                  onBlur={handleBlur}
-                                  error={Boolean(
-                                    touched.txtSupervisorPhone &&
-                                      errors.txtSupervisorPhone
-                                  )}
-                                  helperText={String(
-                                    touched.txtSupervisorPhone &&
-                                      errors.txtSupervisorPhone
-                                  )}
-                                />
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        )} */}
-                        <CardActions>
-                          <Button
-                            color="secondary"
-                            variant="contained"
-                            onClick={handleBack}
-                            sx={{ mr: 1 }}
-                          >
-                            {activeStep === 0 ? 'Back' : 'Previous Step'}
-                          </Button>
-                          <Box sx={{ flex: '1 1 auto' }} />
-                          <Button
-                            color="primary"
-                            variant="contained"
-                            type="submit"
-                            disabled={isSubmitting}
-                          >
-                            {activeStep === steps.length - 1
-                              ? 'Save'
-                              : 'Next Step'}
-                          </Button>
-                        </CardActions>
-                      </Form>
-                    </>
-                  )}
+                          <CardActions>
+                            <Button
+                              color="secondary"
+                              variant="contained"
+                              onClick={handleBack}
+                              sx={{ mr: 1 }}
+                            >
+                              {activeStep === 0 ? 'Back' : 'Previous Step'}
+                            </Button>
+                            <Box sx={{ flex: '1 1 auto' }} />
+                            {/* {activeStep === 0 && (
+                              <Button
+                                color="inherit"
+                                variant="contained"
+                                type="submit"
+                                disabled={isSubmitting}
+                              >
+                                Save and Exit
+                              </Button>
+                            )} */}
+                            {isLastStep ? (
+                              <Button
+                                color="primary"
+                                variant="contained"
+                                type="button"
+                                disabled={isSubmitting}
+                                onClick={handleEmployeeSubmit}
+                              >
+                                Submit
+                              </Button>
+                            ) : (
+                              <Button
+                                color="primary"
+                                variant="contained"
+                                type="submit"
+                                disabled={isSubmitting}
+                              >
+                                Save and Next Step
+                              </Button>
+                            )}
+                          </CardActions>
+                        </Form>
+                      </>
+                    );
+                  }}
                 </Formik>
               </>
             </AdminFormLayout>
