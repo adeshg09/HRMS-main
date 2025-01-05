@@ -1,3 +1,5 @@
+import { ShortRoleModel } from './Role';
+
 /* Create Employee Form interfaces */
 export interface AddUserFormValues {
   txtFirstName: string;
@@ -15,7 +17,7 @@ export interface UserValues {
   email: string;
   password: string;
   phone?: string;
-  roles: Array<number>;
+  roles: Array<ShortRoleModel>;
   is_active: boolean;
   show_activity?: boolean;
 }
@@ -68,6 +70,7 @@ export interface ProfessionalDetailsValues {
 }
 
 export interface AddEmployeeFamilyDetailsFormValues {
+  txtId?: number | null;
   ddlRelationType: string;
   txtName: string;
   txtAge: string;
@@ -81,6 +84,7 @@ export interface AddEmployeeFamilyDetailsFormValues {
 }
 
 export interface AddEmployeeEmergencyContactDetailsFormValues {
+  txtId?: number | null,
   txtContactName: string;
   txtContactAddress: string;
   ddlContactRelation: string;
@@ -88,6 +92,7 @@ export interface AddEmployeeEmergencyContactDetailsFormValues {
 }
 
 export interface AddEmployeeAddressDetailsFormValues {
+  txtId?: number | null;
   ddlAddressType: string;
   txtBuildingName: string;
   txtFlatNumber: string;
@@ -102,6 +107,7 @@ export interface AddEmployeeAddressDetailsFormValues {
 }
 
 export interface AddEmployeeEducationDetailsFormValues {
+  txtId?: number | null;
   ddlCourse: string;
   txtDegreeSpecialization: string;
   txtInstituteName: string;
@@ -113,6 +119,7 @@ export interface AddEmployeeEducationDetailsFormValues {
 }
 
 export interface AddEmployeeExperienceDetailsFormValues {
+  txtId: number | null;
   txtCompanyName: string;
   txtEmployeeId: string;
   txtJobTitle: string;
@@ -261,4 +268,75 @@ export interface EditEmployeeExperienceDetailsFormValues {
   ddlEmploymentType: string;
   txtSupervisorName: string;
   txtSupervisorPhone: string;
+}
+
+export interface AddressDetail {
+  addressType: string;
+  buildingName: string;
+  flatNumber: string;
+  streetName: string;
+  landmark: string;
+  city: string;
+  country: string;
+  state: string;
+  pincode: string;
+  telephoneNumber: string;
+  phone: string;
+  userId?: number;
+}
+
+export interface FamilyDetail {
+  relationType: string;
+  name: string;
+  age: string;
+  birthDate: string;
+  currentAddress: string;
+  birthCountry: string;
+  birthState: string;
+  birthLocation: string;
+  occupation: string;
+  phone: string;
+  userId?: number;
+}
+
+export interface EducationDetail {
+  course: string;
+  degreeSpecialization: string;
+  instituteName: string;
+  fromDate: string;
+  toDate: string;
+  status: string;
+  studyMode: string;
+  percentage: string;
+  userId?: number;
+}
+export interface EmergencyContactDetail {
+  contactName: string;
+  contactAddress: string;
+  contactRelation: string;
+  phone: string;
+  userId?: number;
+}
+
+export interface ExperienceDetail {
+  companyName: string;
+  employeeId: string;
+  jobTitle: string;
+  startDate: string;
+  endDate: string;
+  country: string;
+  city: string;
+  state: string;
+  employmentType: string;
+  supervisorName: string;
+  supervisorPhone: string;
+  userId?: number;
+}
+
+export interface ArrayRequestData {
+  addressDetails?: AddressDetail[];
+  familyDetails?: FamilyDetail[];
+  educationalDetails?: EducationDetail[];
+  emergencyContacts?: EmergencyContactDetail[];
+  experienceDetails?: ExperienceDetail[];
 }

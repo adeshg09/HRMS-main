@@ -39,6 +39,19 @@ export const updateEmployeeFamilyDetailRequest = (
     )
     .then((response) => response.data);
 };
+export const saveEmployeeFamilyDetailRequest = (reqData: any): Promise<any> => {
+  return axiosInstance
+    .post(
+      `/admin/company/employeeFamilyDetail/SaveEmployeeFamilyDetails`,
+      reqData,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+    .then((response) => response.data);
+};
 
 export const getEmployeeFamilyDetailsByUserIdRequest = (
   userId: number | null

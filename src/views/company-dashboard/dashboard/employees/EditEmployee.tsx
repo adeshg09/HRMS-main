@@ -1,7 +1,15 @@
+/* eslint-disable default-case */
 /* Imports */
-import { useEffect, useState, useContext } from 'react';
+import { useEffect, useState, useContext, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { FieldArray, Form, Formik, FormikHelpers, getIn } from 'formik';
+import {
+  FieldArray,
+  Form,
+  Formik,
+  FormikHelpers,
+  FormikProps,
+  getIn
+} from 'formik';
 import * as Yup from 'yup';
 import moment from 'moment';
 import {
@@ -34,7 +42,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-
+import SaveIcon from '@mui/icons-material/Save';
 /* Relative Imports */
 import { PAGE_COMPANY_DASHBOARD } from 'routes/paths';
 import SessionContext from 'context/SessionContext';
@@ -50,7 +58,12 @@ import {
   AddEmployeeFamilyDetailsFormValues,
   AddEmployeePersonalDetailsFormValues,
   AddEmployeeProfessionalDetailsFormValues,
+  AddressDetail,
   AddUserFormValues,
+  EducationDetail,
+  EmergencyContactDetail,
+  ExperienceDetail,
+  FamilyDetail,
   PersonalDetailsValues,
   ProfessionalDetailsValues,
   UserValues
@@ -90,26 +103,31 @@ import {
 import {
   getEmployeeFamilyDetailsByUserIdRequest,
   insertEmployeeFamilyDetailRequest,
+  saveEmployeeFamilyDetailRequest,
   updateEmployeeFamilyDetailRequest
 } from 'services/company/employee/familyDetails';
 import {
   getEmployeeEmergencyContactDetailsByUserIdRequest,
   insertEmployeeEmergencyContactDetailRequest,
+  saveEmployeeEmergencyContactDetailRequest,
   updateEmployeeEmergencyContactDetailRequest
 } from 'services/company/employee/emergencyContactDetails';
 import {
   getEmployeeAddressDetailsByUserIdRequest,
   insertEmployeeAddressDetailRequest,
+  saveEmployeeAddressDetailRequest,
   updateEmployeeAddressDetailRequest
 } from 'services/company/employee/addressDetails';
 import {
   getEmployeeEducationDetailsByUserIdRequest,
   insertEmployeeEducationalDetailRequest,
+  saveEmployeeEducationalDetailRequest,
   updateEmployeeEducationalDetailRequest
 } from 'services/company/employee/educationDetails';
 import {
   getEmployeeExperienceDetailsByUserIdRequest,
   insertEmployeeExperienceDetailRequest,
+  saveEmployeeExperienceDetailRequest,
   updateEmployeeExperienceDetailRequest
 } from 'services/company/employee/experienceDetails';
 import { AdminFormLayout } from 'components/CardLayout';
@@ -128,6 +146,9 @@ import { ALLOWED_FILE_FORMATS } from 'components/InputFields/upload/UploadSingle
 import { DocumentModel } from 'models/company/DocumentType';
 import { getDocumentType } from 'services/company/employee/documentTypeDetails';
 import { getEmployeeDocumentDetailsByUserIdRequest } from 'services/company/employee/documentUpload';
+import { convertToFormData } from 'utility/formDataConverter';
+import { number } from 'prop-types';
+import { calculateAge } from 'utility/calculateAge';
 import adminStyle from '../../company.style';
 import DocumentUploadStep from './DocumentUploadStep';
 
@@ -152,6 +173,7 @@ const EditEmployee = (): JSX.Element => {
   const navigate = useNavigate();
   const { user } = useContext(SessionContext);
   const { showSnackbar } = useSnackbarClose();
+  const formikRef = useRef<FormikProps<AddEmployeeDetailsFormValues>>(null);
 
   /* States */
   const [states, setStates] = useState<string[] | []>([]);
@@ -160,7 +182,7 @@ const EditEmployee = (): JSX.Element => {
   >([]);
   const [roles, setRoles] = useState<Array<RoleModel>>([]);
   const [documentTypes, setDocumentTypes] = useState<Array<DocumentModel>>([]);
-  const [activeStep, setActiveStep] = useState(8);
+  const [activeStep, setActiveStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<{
     [key: number]: boolean;
   }>({});
@@ -209,10 +231,8 @@ const EditEmployee = (): JSX.Element => {
     ddlWorkingType: ''
   } as AddEmployeeProfessionalDetailsFormValues);
 
-  const [
-    initialValuesAddressDetailsEntries,
-    setInitialValuesAddressDetailsEntries
-  ] = useState({
+  const emptyAddressTemplate = {
+    txtId: null,
     ddlAddressType: '',
     txtBuildingName: '',
     txtFlatNumber: '',
@@ -224,12 +244,11 @@ const EditEmployee = (): JSX.Element => {
     txtPincode: '',
     txtTelephoneNumber: '',
     txtPhone: ''
-  } as AddEmployeeAddressDetailsFormValues);
+  };
 
-  const [
-    initialValuesFamilyDetailsEntries,
-    setInitialValuesFamilyDetailsEntries
-  ] = useState({
+  // Family Details Template
+  const emptyFamilyDetailsTemplate = {
+    txtId: null,
     ddlRelationType: '',
     txtName: '',
     txtAge: '',
@@ -240,12 +259,11 @@ const EditEmployee = (): JSX.Element => {
     txtBirthLocation: '',
     txtOccupation: '',
     txtPhone: ''
-  } as AddEmployeeFamilyDetailsFormValues);
+  };
 
-  const [
-    initialValuesEducationDetailsEntries,
-    setInitialValuesEducationDetailsEntries
-  ] = useState({
+  // Education Details Template
+  const emptyEducationDetailsTemplate = {
+    txtId: null,
     ddlCourse: '',
     txtDegreeSpecialization: '',
     txtInstituteName: '',
@@ -254,22 +272,20 @@ const EditEmployee = (): JSX.Element => {
     ddlStatus: '',
     ddlStudyMode: '',
     txtPercentage: ''
-  } as AddEmployeeEducationDetailsFormValues);
+  };
 
-  const [
-    initialValuesEmergencyContactDetailsEntries,
-    setInitialValuesEmergencyContactDetailsEntries
-  ] = useState({
-    txtContactName: '',
-    txtContactAddress: '',
-    ddlContactRelation: '',
-    txtPhone: ''
-  } as AddEmployeeEmergencyContactDetailsFormValues);
+  // Emergency Contact Details Template
+  const emptyEmergencyContactDetailsTemplate: AddEmployeeEmergencyContactDetailsFormValues =
+    {
+      txtContactName: '',
+      txtContactAddress: '',
+      ddlContactRelation: '',
+      txtPhone: ''
+    };
 
-  const [
-    initialValuesExperienceDetailsEntries,
-    setInitialValuesExperienceDetailsEntries
-  ] = useState({
+  // Experience Details Template
+  const emptyExperienceDetailsTemplate = {
+    txtId: null,
     txtCompanyName: '',
     txtEmployeeId: '',
     txtJobTitle: '',
@@ -281,7 +297,94 @@ const EditEmployee = (): JSX.Element => {
     ddlEmploymentType: '',
     txtSupervisorName: '',
     txtSupervisorPhone: ''
-  } as AddEmployeeExperienceDetailsFormValues);
+  };
+  const [
+    initialValuesAddressDetailsEntries,
+    setInitialValuesAddressDetailsEntries
+  ] = useState<AddEmployeeAddressDetailsFormValues[]>([
+    {
+      txtId: null,
+      ddlAddressType: '',
+      txtBuildingName: '',
+      txtFlatNumber: '',
+      txtStreetName: '',
+      txtLandmark: '',
+      txtCity: '',
+      ddlCountry: '',
+      ddlState: '',
+      txtPincode: '',
+      txtTelephoneNumber: '',
+      txtPhone: ''
+    }
+  ]);
+  const [
+    initialValuesFamilyDetailsEntries,
+    setInitialValuesFamilyDetailsEntries
+  ] = useState<AddEmployeeFamilyDetailsFormValues[]>([
+    {
+      txtId: null,
+      ddlRelationType: '',
+      txtName: '',
+      txtAge: '',
+      txtBirthDate: '',
+      txtCurrentAddress: '',
+      ddlBirthCountry: '',
+      ddlBirthState: '',
+      txtBirthLocation: '',
+      txtOccupation: '',
+      txtPhone: ''
+    }
+  ]);
+
+  const [
+    initialValuesEducationDetailsEntries,
+    setInitialValuesEducationDetailsEntries
+  ] = useState<AddEmployeeEducationDetailsFormValues[]>([
+    {
+      txtId: null,
+      ddlCourse: '',
+      txtDegreeSpecialization: '',
+      txtInstituteName: '',
+      txtFromDate: '',
+      txtToDate: '',
+      ddlStatus: '',
+      ddlStudyMode: '',
+      txtPercentage: ''
+    }
+  ]);
+
+  const [
+    initialValuesEmergencyContactDetailsEntries,
+    setInitialValuesEmergencyContactDetailsEntries
+  ] = useState<AddEmployeeEmergencyContactDetailsFormValues[]>([
+    {
+      txtId: null,
+      txtContactName: '',
+      txtContactAddress: '',
+      ddlContactRelation: '',
+      txtPhone: ''
+    }
+  ]);
+
+  const [
+    initialValuesExperienceDetailsEntries,
+    setInitialValuesExperienceDetailsEntries
+  ] = useState<AddEmployeeExperienceDetailsFormValues[]>([
+    {
+      txtId: null,
+      txtCompanyName: '',
+      txtEmployeeId: '',
+      txtJobTitle: '',
+      txtStartDate: '',
+      txtEndDate: '',
+      ddlCountry: '',
+      txtCity: '',
+      ddlState: '',
+      ddlEmploymentType: '',
+      txtSupervisorName: '',
+      txtSupervisorPhone: ''
+    }
+  ]);
 
   const [
     initialValuesDocumentDetailsEntries,
@@ -295,11 +398,11 @@ const EditEmployee = (): JSX.Element => {
     ...initialValuesCreateUser,
     ...initialValuesPersonalDetails,
     ...initialValuesProfessionalDetails,
-    addressDetails: [initialValuesAddressDetailsEntries],
-    familyDetails: [initialValuesFamilyDetailsEntries],
-    educationDetails: [initialValuesEducationDetailsEntries],
-    emergencyContactDetails: [initialValuesEmergencyContactDetailsEntries],
-    experienceDetails: [initialValuesExperienceDetailsEntries],
+    addressDetails: initialValuesAddressDetailsEntries,
+    familyDetails: initialValuesFamilyDetailsEntries,
+    educationDetails: initialValuesEducationDetailsEntries,
+    emergencyContactDetails: initialValuesEmergencyContactDetailsEntries,
+    experienceDetails: initialValuesExperienceDetailsEntries,
     documentDetails: [initialValuesDocumentDetailsEntries]
   };
   const isLastStep = activeStep === steps.length - 1;
@@ -324,6 +427,8 @@ const EditEmployee = (): JSX.Element => {
   const handleCountryChange = (countryCode: string): void => {
     const selectedCountry = countries.find((x) => x.alpha2Code === countryCode);
     setStates(selectedCountry ? selectedCountry.states : []);
+    console.log('selected states', selectedCountry?.states);
+    console.log('main sates', states);
   };
 
   /**
@@ -501,6 +606,15 @@ const EditEmployee = (): JSX.Element => {
   };
 
   /**
+   * handleStepClick Function
+   * @param {step} step of the feild to be deleted - input values of form
+   * @return {void}
+   */
+  const handleStepClick = (step: number): any => {
+    setActiveStep(step);
+  };
+
+  /**
    * Submit function to save Employee Details based on Details type with backend action
    * @param {AddEmployeeDetailsFormValues} values - input values of form
    * @param {object} {setSubmitting} - function to check submission
@@ -528,6 +642,11 @@ const EditEmployee = (): JSX.Element => {
 
         if (completedSteps[0]) {
           response = await updateUserRequest(userId, requestDataUserForm);
+        } else {
+          response = await registerUserRequest(requestDataUserForm);
+          if (response?.status.response_code === 200) {
+            setUserId(response.user.id); // Save the new user ID
+          }
         }
 
         if (response?.status.response_code === 200) {
@@ -556,6 +675,7 @@ const EditEmployee = (): JSX.Element => {
         }
       } else if (activeStep === 1) {
         const requestDataEmployeePersonalDetails: any = {
+          userId, // Include userId for new entries
           birthDate: values.txtBirthDate,
           age: values.txtAge,
           birthCountry: values.ddlBirthCountry,
@@ -581,7 +701,6 @@ const EditEmployee = (): JSX.Element => {
             requestDataEmployeePersonalDetails
           );
         } else {
-          requestDataEmployeePersonalDetails.userId = userId;
           response = await insertEmployeePersonalDetailRequest(
             requestDataEmployeePersonalDetails
           );
@@ -645,6 +764,8 @@ const EditEmployee = (): JSX.Element => {
       } else if (activeStep === 4) {
         const reqDataFamilyDetails: any = values.familyDetails.map(
           (detail) => ({
+            id: detail.txtId || null,
+            userId,
             relationType: detail.ddlRelationType,
             name: detail.txtName,
             age: detail.txtAge,
@@ -658,21 +779,9 @@ const EditEmployee = (): JSX.Element => {
           })
         );
 
-        if (completedSteps[4]) {
-          // For update, pass userId separately (without it in familyDetails objects)
-          response = await updateEmployeeFamilyDetailRequest(
-            userId,
-            reqDataFamilyDetails
-          );
-        } else {
-          // For insert, include userId in each family detail object
-          response = await insertEmployeeFamilyDetailRequest({
-            familyDetails: reqDataFamilyDetails.map((detail: any) => ({
-              ...detail,
-              userId
-            }))
-          });
-        }
+        response = await saveEmployeeFamilyDetailRequest({
+          familyDetails: reqDataFamilyDetails
+        });
 
         if (response?.status.response_code === 200) {
           setCompletedSteps((prev) => ({ ...prev, 4: true }));
@@ -694,6 +803,7 @@ const EditEmployee = (): JSX.Element => {
       } else if (activeStep === 5) {
         const requestDataEducationDetails: any = values.educationDetails.map(
           (detail) => ({
+            id: detail.txtId,
             course: detail.ddlCourse,
             degreeSpecialization: detail.txtDegreeSpecialization,
             instituteName: detail.txtInstituteName,
@@ -701,25 +811,14 @@ const EditEmployee = (): JSX.Element => {
             toDate: detail.txtToDate,
             status: detail.ddlStatus,
             studyMode: detail.ddlStudyMode,
-            percentage: detail.txtPercentage
+            percentage: detail.txtPercentage,
+            userId
           })
         );
 
-        if (completedSteps[5]) {
-          response = await updateEmployeeEducationalDetailRequest(
-            userId,
-            requestDataEducationDetails
-          );
-        } else {
-          response = await insertEmployeeEducationalDetailRequest({
-            educationalDetails: requestDataEducationDetails.map(
-              (detail: any) => ({
-                ...detail,
-                userId
-              })
-            )
-          });
-        }
+        response = await saveEmployeeEducationalDetailRequest({
+          educationalDetails: requestDataEducationDetails
+        });
 
         if (response?.status.response_code === 200) {
           setCompletedSteps((prev) => ({ ...prev, 5: true }));
@@ -741,27 +840,17 @@ const EditEmployee = (): JSX.Element => {
       } else if (activeStep === 6) {
         const requestDataEmergencyContacts: any =
           values.emergencyContactDetails.map((contact) => ({
+            id: contact.txtId,
             contactName: contact.txtContactName,
             contactAddress: contact.txtContactAddress,
             contactRelation: contact.ddlContactRelation,
-            phone: contact.txtPhone
+            phone: contact.txtPhone,
+            userId
           }));
 
-        if (completedSteps[6]) {
-          response = await updateEmployeeEmergencyContactDetailRequest(
-            userId,
-            requestDataEmergencyContacts
-          );
-        } else {
-          response = await insertEmployeeEmergencyContactDetailRequest({
-            emergencyContacts: requestDataEmergencyContacts.map(
-              (contact: any) => ({
-                ...contact,
-                userId
-              })
-            )
-          });
-        }
+        response = await saveEmployeeEmergencyContactDetailRequest({
+          emergencyContacts: requestDataEmergencyContacts
+        });
 
         if (response?.status.response_code === 200) {
           setCompletedSteps((prev) => ({ ...prev, 6: true }));
@@ -783,6 +872,7 @@ const EditEmployee = (): JSX.Element => {
       } else if (activeStep === 7) {
         const requestDataExperienceDetails: any = values.experienceDetails.map(
           (detail) => ({
+            id: detail.txtId,
             companyName: detail.txtCompanyName,
             employeeId: detail.txtEmployeeId,
             jobTitle: detail.txtJobTitle,
@@ -793,25 +883,14 @@ const EditEmployee = (): JSX.Element => {
             state: detail.ddlState,
             employmentType: detail.ddlEmploymentType,
             supervisorName: detail.txtSupervisorName,
-            supervisorPhone: detail.txtSupervisorPhone
+            supervisorPhone: detail.txtSupervisorPhone,
+            userId
           })
         );
 
-        if (completedSteps[7]) {
-          response = await updateEmployeeExperienceDetailRequest(
-            userId,
-            requestDataExperienceDetails
-          );
-        } else {
-          response = await insertEmployeeExperienceDetailRequest({
-            experienceDetails: requestDataExperienceDetails.map(
-              (experience: any) => ({
-                ...experience,
-                userId
-              })
-            )
-          });
-        }
+        response = await saveEmployeeExperienceDetailRequest({
+          experienceDetails: requestDataExperienceDetails
+        });
 
         if (response?.status.response_code === 200) {
           setCompletedSteps((prev) => ({ ...prev, 7: true }));
@@ -833,6 +912,7 @@ const EditEmployee = (): JSX.Element => {
       } else if (activeStep === 3) {
         const requestDataAddressDetails: any = values.addressDetails.map(
           (detail) => ({
+            id: detail.txtId || null,
             addressType: detail.ddlAddressType,
             buildingName: detail.txtBuildingName,
             flatNumber: detail.txtFlatNumber,
@@ -842,25 +922,27 @@ const EditEmployee = (): JSX.Element => {
             state: detail.ddlState,
             pincode: detail.txtPincode,
             telephoneNumber: detail.txtTelephoneNumber,
-            phone: detail.txtPhone
+            phone: detail.txtPhone,
+            userId
           })
         );
-
-        if (completedSteps[3]) {
-          response = await updateEmployeeAddressDetailRequest(
-            userId,
-            requestDataAddressDetails
-          );
-        } else {
-          response = await insertEmployeeAddressDetailRequest({
-            employeeAddresses: requestDataAddressDetails.map(
-              (address: any) => ({
-                ...address,
-                userId
-              })
-            )
-          });
-        }
+        response = await saveEmployeeAddressDetailRequest({
+          employeeAddresses: requestDataAddressDetails
+        });
+        // if (completedSteps[3]) {
+        //   response = await saveEmployeeAddressDetailRequest({
+        //     employeeAddresses: requestDataAddressDetails
+        //   });
+        // } else {
+        //   response = await saveEmployeeAddressDetailRequest({
+        //     employeeAddresses: requestDataAddressDetails.map(
+        //       (address: any) => ({
+        //         ...address,
+        //         userId
+        //       })
+        //     )
+        //   });
+        // }
 
         if (response?.status.response_code === 200) {
           setCompletedSteps((prev) => ({ ...prev, 3: true }));
@@ -892,17 +974,20 @@ const EditEmployee = (): JSX.Element => {
       if (activeStep === 0) {
         const response = await getUserByIdRequest(Number(id));
         const userData: UserValues = response?.user;
+        console.log(userData);
         if (userData) {
+          console.log('Entering User data');
           setInitialValuesCreateUser({
             txtFirstName: userData.first_name,
             txtLastName: userData.last_name,
             txtEmail: userData.email,
             txtPassword: userData.password,
             txtPhone: userData.phone,
-            ddlRoles: userData.roles,
+            ddlRoles: userData.roles?.map((item) => item.id),
             chkIsActive: userData.is_active,
             chkShowActivity: userData.show_activity
           });
+          console.log('Setted values', initialValuesCreateUser);
           setCompletedSteps((prev) => ({ ...prev, 0: true }));
           setUserId(Number(id));
         }
@@ -911,12 +996,18 @@ const EditEmployee = (): JSX.Element => {
           Number(id)
         );
         const personalDetailsData: PersonalDetailsValues =
-          response?.employeePersonalDetail;
+          response.employeePersonalDetail;
+        console.log('personal Details', personalDetailsData);
         if (personalDetailsData) {
+          console.log(
+            'persoanl details countries',
+            personalDetailsData.birth_country
+          );
           const countryCode =
             countries.find(
-              (x) => x.country === personalDetailsData.birth_country?.trim()
+              (x) => x.alpha2Code === personalDetailsData.birth_country?.trim()
             )?.alpha2Code || '';
+          console.log('country code is', countryCode);
           handleCountryChange(countryCode);
           setInitialValuesPersonalDetails({
             txtBirthDate: personalDetailsData.birth_date,
@@ -956,10 +1047,13 @@ const EditEmployee = (): JSX.Element => {
         const response = await getEmployeeAddressDetailsByUserIdRequest(
           Number(id)
         );
+        setUserId(response.employeeAddresses[0].user_id);
+        console.log('Address response', response);
         const addressData = response?.employeeAddresses;
         if (addressData?.length) {
           setInitialValuesAddressDetailsEntries(
             addressData.map((address: any) => ({
+              txtId: address.id,
               ddlAddressType: address.address_type,
               txtBuildingName: address.building_name,
               txtFlatNumber: address.flat_number,
@@ -979,10 +1073,12 @@ const EditEmployee = (): JSX.Element => {
         const response = await getEmployeeFamilyDetailsByUserIdRequest(
           Number(id)
         );
-        const familyData = response?.familyDetails;
+        setUserId(response.employeeFamilyDetails[0].user_id);
+        const familyData = response?.employeeFamilyDetails;
         if (familyData?.length) {
           setInitialValuesFamilyDetailsEntries(
             familyData.map((family: any) => ({
+              txtId: family.id,
               ddlRelationType: family.relation_type,
               txtName: family.name,
               txtAge: family.age,
@@ -1001,10 +1097,12 @@ const EditEmployee = (): JSX.Element => {
         const response = await getEmployeeEducationDetailsByUserIdRequest(
           Number(id)
         );
-        const educationData = response?.educationalDetails;
+        const educationData = response?.employeeEducationalDetails;
+        // setUserId(educationData[0].user_id);
         if (educationData?.length) {
           setInitialValuesEducationDetailsEntries(
             educationData.map((education: any) => ({
+              txtId: education.id,
               ddlCourse: education.course,
               txtDegreeSpecialization: education.degree_specialization,
               txtInstituteName: education.institute_name,
@@ -1020,10 +1118,11 @@ const EditEmployee = (): JSX.Element => {
       } else if (activeStep === 6) {
         const response =
           await getEmployeeEmergencyContactDetailsByUserIdRequest(Number(id));
-        const contactsData = response?.emergencyContacts;
+        const contactsData = response?.employeeEmergencyContacts;
         if (contactsData?.length) {
           setInitialValuesEmergencyContactDetailsEntries(
             contactsData.map((contact: any) => ({
+              txtId: contact.id,
               txtContactName: contact.contact_name,
               txtContactAddress: contact.contact_address,
               ddlContactRelation: contact.contact_relation,
@@ -1036,10 +1135,11 @@ const EditEmployee = (): JSX.Element => {
         const response = await getEmployeeExperienceDetailsByUserIdRequest(
           Number(id)
         );
-        const experienceData = response?.experienceDetails;
+        const experienceData = response?.employeeExperienceDetails;
         if (experienceData?.length) {
           setInitialValuesExperienceDetailsEntries(
             experienceData.map((experience: any) => ({
+              txtId: experience.id,
               txtCompanyName: experience.company_name,
               txtEmployeeId: experience.employee_id,
               txtJobTitle: experience.job_title,
@@ -1099,8 +1199,7 @@ const EditEmployee = (): JSX.Element => {
         .required('Please enter the email address.'),
       txtPassword: Yup.string()
         .min(7, 'Password should be minimum 7 characters.')
-        .max(100, 'Password should be maximum 100 characters.')
-        .required('Please enter the password.'),
+        .max(100, 'Password should be maximum 100 characters.'),
       ddlRoles: Yup.array()
         .min(1, 'Please select the role.')
         .required('Please select the role.'),
@@ -1179,7 +1278,7 @@ const EditEmployee = (): JSX.Element => {
             ),
             txtLandmark: Yup.string().required('Please enter the landmark'),
             txtCity: Yup.string().required('Please enter the city.'),
-            ddlCountry: Yup.string().required('Please select the country.'),
+            ddlCountry: Yup.string().required('Please select the countyr'),
             ddlState: Yup.string().required('Please select the state.'),
             txtPincode: Yup.string()
               .matches(/^[0-9]{6}$/, 'Please enter a valid 6-digit pincode.')
@@ -1266,10 +1365,20 @@ const EditEmployee = (): JSX.Element => {
             ddlStudyMode: Yup.string().required(
               'Please select the study mode.'
             ),
-            txtPercentage: Yup.number()
-              .min(0, 'Percentage cannot be negative.')
-              .max(100, 'Percentage cannot be more than 100.')
-              .required('Please enter the percentage.')
+            txtPercentage: Yup.number().required('Please enter the percentage.')
+            // .test(
+            //   'is-decimal',
+            //   'Please enter a valid decimal number',
+            //   (value) => {
+            //     if (!value) return true; // Skip validation if empty (handled by required())
+            //     const regex = /^\d+(\.\d{0,2})?$/; // Allow up to 2 decimal places
+            //     return regex.test(String(value));
+            //   }
+            // )
+            // .transform((value) => {
+            //   // Convert string to number with 2 decimal places
+            //   return Number(Number(value).toFixed(2));
+            // })
           })
         )
         .min(1, 'Please add at least one education record.')
@@ -1368,45 +1477,33 @@ const EditEmployee = (): JSX.Element => {
   const currentValidationSchema = validationSchema[activeStep];
 
   const CustomConnector = styled(StepConnector)(({ theme }) => ({
-    // Media query for md breakpoint
     [`&.${theme.breakpoints.up('md')}`]: {
       top: 10,
       left: 'calc(-50% + 16px)',
       right: 'calc(50% + 16px)'
     },
-
-    // Alternative label styles
     [`&.${stepConnectorClasses.alternativeLabel}`]: {
       top: 22,
       left: 'calc(-50% + 16px)',
       right: 'calc(50% + 16px)'
     },
-
-    // Active state
+    // Only show active/completed styles when explicitly set
     [`&.${stepConnectorClasses.active}`]: {
       [`& .${stepConnectorClasses.line}`]: {
-        borderColor: theme.palette.primary.main,
-        borderWidth: 2
+        borderColor: theme.palette.grey[400] // Use a neutral color for active
       }
     },
-
-    // Completed state
     [`&.${stepConnectorClasses.completed}`]: {
       [`& .${stepConnectorClasses.line}`]: {
-        borderColor: theme.palette.primary.main
+        borderColor: theme.palette.grey[400] // Use a neutral color for non-completed
       }
     },
-
-    // Line styles
     [`& .${stepConnectorClasses.line}`]: {
-      borderColor:
-        theme.palette.mode === 'dark' ? theme.palette.grey[800] : '#eaeaf0',
+      borderColor: theme.palette.grey[400],
       borderTopWidth: 2,
-      borderRadius: 4,
-      transition: 'all 0.3s ease'
+      borderRadius: 4
     }
   }));
-
   const CustomStepLabel = styled(StepLabel)(({ theme }) => ({
     flexDirection: 'column',
     '& .MuiStepLabel-iconContainer': {
@@ -1455,7 +1552,8 @@ const EditEmployee = (): JSX.Element => {
             >
               <>
                 <Formik
-                  enableReinitialize={false}
+                  innerRef={formikRef}
+                  enableReinitialize
                   initialValues={initialValues}
                   validationSchema={currentValidationSchema}
                   onSubmit={handleFormSubmit}
@@ -1507,13 +1605,40 @@ const EditEmployee = (): JSX.Element => {
                                 mt: 2,
                                 p: 1,
                                 '& .MuiStep-root': {
-                                  padding: '0 8px'
+                                  padding: '0 8px',
+                                  cursor: 'pointer'
                                 }
                               }}
                             >
-                              {steps.map((label) => (
-                                <Step key={label}>
-                                  <CustomStepLabel>{label}</CustomStepLabel>
+                              {steps.map((label, index) => (
+                                <Step
+                                  key={label}
+                                  completed={completedSteps[index] === true}
+                                  onClick={() => handleStepClick(index)}
+                                  sx={{
+                                    '&:hover': {
+                                      '& .MuiStepLabel-label': {
+                                        color: (theme) =>
+                                          theme.palette.primary.main
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <CustomStepLabel
+                                    sx={{
+                                      cursor: 'pointer',
+                                      '& .MuiStepIcon-root': {
+                                        ...(completedSteps[index] && {
+                                          '&.Mui-completed': {
+                                            color: (theme) =>
+                                              theme.palette.primary.main
+                                          }
+                                        })
+                                      }
+                                    }}
+                                  >
+                                    {label}
+                                  </CustomStepLabel>
                                 </Step>
                               ))}
                             </Stepper>
@@ -1688,10 +1813,17 @@ const EditEmployee = (): JSX.Element => {
                                       inputFormat="DD/MM/YYYY"
                                       value={values.txtBirthDate}
                                       onChange={(newValue: any) => {
+                                        const birthDate = getDate(
+                                          newValue,
+                                          'dd MMM yyyy'
+                                        );
                                         setFieldValue(
                                           'txtBirthDate',
-                                          getDate(newValue, 'dd MMM yyyy')
+                                          birthDate
                                         );
+                                        // Calculate and set age automatically
+                                        const age = calculateAge(birthDate);
+                                        setFieldValue('txtAge', age);
                                       }}
                                       renderInput={(params: any) => (
                                         <CustomField
@@ -1729,7 +1861,7 @@ const EditEmployee = (): JSX.Element => {
                                     name="txtAge"
                                     type="number"
                                     value={values.txtAge}
-                                    inputProps={{ min: 1 }}
+                                    inputProps={{ readOnly: true }}
                                     onChange={handleChange}
                                     onBlur={handleBlur}
                                     error={Boolean(
@@ -2196,7 +2328,7 @@ const EditEmployee = (): JSX.Element => {
                                     variant="contained"
                                     color="primary"
                                     onClick={() => {
-                                      push(initialValuesAddressDetailsEntries);
+                                      push(emptyAddressTemplate);
                                     }}
                                     sx={{ ml: 80, mb: 2 }}
                                   >
@@ -2682,7 +2814,7 @@ const EditEmployee = (): JSX.Element => {
                                     variant="contained"
                                     color="primary"
                                     onClick={() =>
-                                      push(initialValuesFamilyDetailsEntries)
+                                      push(emptyFamilyDetailsTemplate)
                                     }
                                     sx={{ ml: 80, mb: 2 }}
                                   >
@@ -3124,7 +3256,7 @@ const EditEmployee = (): JSX.Element => {
                                     variant="contained"
                                     color="primary"
                                     onClick={() =>
-                                      push(initialValuesEducationDetailsEntries)
+                                      push(emptyEducationDetailsTemplate)
                                     }
                                     sx={{ ml: 80, mb: 2 }}
                                   >
@@ -3575,9 +3707,7 @@ const EditEmployee = (): JSX.Element => {
                                     variant="contained"
                                     color="primary"
                                     onClick={() =>
-                                      push(
-                                        initialValuesEmergencyContactDetailsEntries
-                                      )
+                                      push(emptyEmergencyContactDetailsTemplate)
                                     }
                                     sx={{ ml: 80, mb: 2 }}
                                   >
@@ -3615,6 +3745,18 @@ const EditEmployee = (): JSX.Element => {
                                                   size="small"
                                                 >
                                                   <DeleteIcon />
+                                                </IconButton>
+                                              )}
+                                            </Grid>
+                                            <Grid item xs={1}>
+                                              {index > 0 && (
+                                                <IconButton
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                  }}
+                                                  size="small"
+                                                >
+                                                  <SaveIcon />
                                                 </IconButton>
                                               )}
                                             </Grid>
@@ -3803,9 +3945,7 @@ const EditEmployee = (): JSX.Element => {
                                     variant="contained"
                                     color="primary"
                                     onClick={() =>
-                                      push(
-                                        initialValuesExperienceDetailsEntries
-                                      )
+                                      push(emptyExperienceDetailsTemplate)
                                     }
                                     sx={{ ml: 80, mb: 2 }}
                                   >

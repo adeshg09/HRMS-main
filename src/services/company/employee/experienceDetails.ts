@@ -38,6 +38,21 @@ export const updateEmployeeExperienceDetailRequest = (
     )
     .then((response) => response.data);
 };
+export const saveEmployeeExperienceDetailRequest = (
+  reqData: any
+): Promise<any> => {
+  return axiosInstance
+    .post(
+      `/admin/company/employeeExperienceDetail/SaveEmployeeExperienceDetails`,
+      reqData,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+    .then((response) => response.data);
+};
 
 export const getEmployeeExperienceDetailsByUserIdRequest = (
   userId: number | null

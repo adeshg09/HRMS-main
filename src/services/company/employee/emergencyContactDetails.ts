@@ -4,6 +4,7 @@
 
 /* Relative Imports */
 import axiosInstance from 'config/axiosConfig';
+import { EmergencyContactDetail } from 'models/company/employee';
 
 // ----------------------------------------------------------------------
 
@@ -33,11 +34,26 @@ export const insertEmployeeEmergencyContactDetailRequest = (
 
 export const updateEmployeeEmergencyContactDetailRequest = (
   userId: number | null,
-  reqData: EmergencyContact[]
+  reqData: EmergencyContactDetail[]
 ): Promise<any> => {
   return axiosInstance
     .put(
       `admin/company/employeeEmergencyContact/UpdateEmployeeEmergencyContact/${userId}`,
+      reqData,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+    .then((response) => response.data);
+};
+export const saveEmployeeEmergencyContactDetailRequest = (
+  reqData: any
+): Promise<any> => {
+  return axiosInstance
+    .post(
+      `/admin/company/employeeEmergencyContact/SaveEmployeeEmergencyContacts`,
       reqData,
       {
         headers: {
