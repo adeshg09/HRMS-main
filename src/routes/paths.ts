@@ -203,6 +203,18 @@ export const PAGE_COMPANY_DASHBOARD = {
       absolutePath: `/${ROOT_COMPANY_DASHBOARD}/employees/edit/:id`
     }
   },
+  manageDocuments: {
+    relativePath: 'manage-documents',
+    absolutePath: `/${ROOT_COMPANY_DASHBOARD}/manage-documents`,
+    create: {
+      relativePath: 'create',
+      absolutPath: `${ROOT_COMPANY_DASHBOARD}/manage-documents/create`
+    },
+    edit: {
+      relativePath: 'edit/:id',
+      absolutePath: `${ROOT_COMPANY_DASHBOARD}/manage-documents/edit/:id`
+    }
+  },
   clients: {
     relativePath: 'clients',
     absolutePath: `/${ROOT_COMPANY_DASHBOARD}/clients`,
@@ -242,5 +254,41 @@ export const PAGE_COMPANY_DASHBOARD = {
   employeeTracker: {
     relativePath: 'employee-tracker',
     absolutePath: `/${ROOT_COMPANY_DASHBOARD}/employee-tracker`
+  },
+  myProfile: {
+    relativePath: 'my-profile',
+    absolutePath: `/${ROOT_COMPANY_DASHBOARD}/my-profile`,
+    personalDetails: {
+      relativePath: 'personal-details',
+      absolutePath: `/${ROOT_COMPANY_DASHBOARD}/my-profile/personal-details`
+    },
+    professionalDetails: {
+      relativePath: 'professional-details',
+      absolutePath: `/${ROOT_COMPANY_DASHBOARD}/my-profile/professional-details`
+    },
+    addressDetails: {
+      relativePath: 'address-details',
+      absolutePath: `/${ROOT_COMPANY_DASHBOARD}/my-profile/address-details`
+    },
+    familyDetails: {
+      relativePath: 'family-details',
+      absolutePath: `/${ROOT_COMPANY_DASHBOARD}/my-profile/family-details`
+    },
+    educationDetails: {
+      relativePath: 'education-details',
+      absolutePath: `/${ROOT_COMPANY_DASHBOARD}/my-profile/education-details`
+    },
+    emergencyContactDetails: {
+      relativePath: 'emergency-contact-details',
+      absolutePath: `/${ROOT_COMPANY_DASHBOARD}/my-profile/emergency-contact-details`
+    },
+    experienceDetails: {
+      relativePath: 'experience-details',
+      absolutePath: `/${ROOT_COMPANY_DASHBOARD}/my-profile/experience-details`
+    },
+    documentsDetails: {
+      relativePath: 'documents-details',
+      absolutePath: `/${ROOT_COMPANY_DASHBOARD}/my-profile/documents-details`
+    }
   }
 };

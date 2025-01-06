@@ -25,11 +25,24 @@ export const insertEmployeeFamilyDetailRequest = (
 
 export const updateEmployeeFamilyDetailRequest = (
   userId: number | null,
-  reqData: FormData
+  reqData: any
 ): Promise<any> => {
   return axiosInstance
     .put(
       `admin/company/employeeFamilyDetail/UpdateEmployeeFamilyDetail/${userId}`,
+      reqData,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+    .then((response) => response.data);
+};
+export const saveEmployeeFamilyDetailRequest = (reqData: any): Promise<any> => {
+  return axiosInstance
+    .post(
+      `admin/company/employeeFamilyDetail/SaveEmployeeFamilyDetails`,
       reqData,
       {
         headers: {
@@ -47,5 +60,14 @@ export const getEmployeeFamilyDetailsByUserIdRequest = (
     .get(
       `admin/company/employeeFamilyDetail/GetEmployeeFamilyDetailsByUserId/${userId}`
     )
+    .then((response) => response.data);
+};
+export const deleteEmployeeFamilyDetailRequest = (id: any): Promise<any> => {
+  return axiosInstance
+    .post(`admin/company/employeeAddress/DeleteEmployeeAddress/${id}`, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
     .then((response) => response.data);
 };

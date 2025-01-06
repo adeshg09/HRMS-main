@@ -27,7 +27,17 @@ import {
   AccountTree as AccountTreeIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
   DataUsage as DataUsageIcon,
-  Hail as HailIcon
+  Hail as HailIcon,
+  AccountBox as ProfileIcon,
+  ContactMail as PersonalDetailsIcon,
+  Work as ProfessionalDetailsIcon,
+  Home as AddressDetailsIcon,
+  People as FamilyDetailsIcon,
+  School as EducationDetailsIcon,
+  ContactPhone as EmergencyContactIcon,
+  WorkHistory as ExperienceDetailsIcon,
+  Folder as DocumentsDetailsIcon,
+  ArticleOutlined as DocumentIcon
 } from '@mui/icons-material';
 
 /* Relative Imports */
@@ -123,15 +133,20 @@ export const companySidebarConfig = [
     href: PAGE_COMPANY_DASHBOARD.designations.absolutePath,
     icon: AdminPanelSettingsIcon
   },
-  {
-    title: 'Manage Users',
-    href: PAGE_COMPANY_DASHBOARD.users.absolutePath,
-    icon: PersonIcon
-  },
+  // {
+  //   title: 'Manage Users',
+  //   href: PAGE_COMPANY_DASHBOARD.users.absolutePath,
+  //   icon: PersonIcon
+  // },
   {
     title: 'Manage Employees',
     href: PAGE_COMPANY_DASHBOARD.employees.absolutePath,
     icon: PersonIcon
+  },
+  {
+    title: 'Manage Document Type',
+    href: PAGE_COMPANY_DASHBOARD.manageDocuments.absolutePath,
+    icon: DocumentIcon
   },
   {
     title: 'Manage Clients',
@@ -169,6 +184,53 @@ export const companyContentManagerSidebarConfig = [
 ];
 
 export const companyUserSidebarConfig = [
+  {
+    title: 'My Profile',
+    href: PAGE_COMPANY_DASHBOARD.myProfile.absolutePath,
+    icon: ProfileIcon,
+    subItems: [
+      {
+        title: 'Personal Details',
+        href: `${PAGE_COMPANY_DASHBOARD.myProfile.absolutePath}/personal-details`,
+        icon: PersonalDetailsIcon
+      },
+      {
+        title: 'Professional Details',
+        href: `${PAGE_COMPANY_DASHBOARD.myProfile.absolutePath}/professional-details`,
+        icon: ProfessionalDetailsIcon
+      },
+      {
+        title: 'Address Details',
+        href: `${PAGE_COMPANY_DASHBOARD.myProfile.absolutePath}/address-details`,
+        icon: AddressDetailsIcon
+      },
+      {
+        title: 'Family Details',
+        href: `${PAGE_COMPANY_DASHBOARD.myProfile.absolutePath}/family-details`,
+        icon: FamilyDetailsIcon
+      },
+      {
+        title: 'Education Details',
+        href: `${PAGE_COMPANY_DASHBOARD.myProfile.absolutePath}/education-details`,
+        icon: EducationDetailsIcon
+      },
+      {
+        title: 'Emergency Contact Details',
+        href: `${PAGE_COMPANY_DASHBOARD.myProfile.absolutePath}/emergency-contact-details`,
+        icon: EmergencyContactIcon
+      },
+      {
+        title: 'Experience Details',
+        href: `${PAGE_COMPANY_DASHBOARD.myProfile.absolutePath}/experience-details`,
+        icon: ExperienceDetailsIcon
+      },
+      {
+        title: 'Documents Details',
+        href: `${PAGE_COMPANY_DASHBOARD.myProfile.absolutePath}/documents-details`,
+        icon: DocumentsDetailsIcon
+      }
+    ]
+  },
   {
     title: 'My Tracker',
     href: PAGE_COMPANY_DASHBOARD.myTracker.absolutePath,

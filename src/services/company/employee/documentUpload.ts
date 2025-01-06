@@ -27,6 +27,7 @@ export const updateEmployeeDocument = async (
 export const getEmployeeDocumentDetailsByUserIdRequest = (
   userId: number | null
 ): Promise<any> => {
+  // console.log('userId is', userId);
   return axiosInstance
     .get(
       `admin/company/employeeDocument/GetEmployeeDocumentsByUserId/${userId}`

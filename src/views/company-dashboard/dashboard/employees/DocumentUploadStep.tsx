@@ -1,5 +1,5 @@
 /* eslint-disable no-nested-ternary */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -18,7 +18,8 @@ import useSnackbarClose from 'hooks/useSnackbarClose';
 import { toastMessages } from 'constants/appConstant';
 import {
   uploadEmployeeDocument,
-  updateEmployeeDocument
+  updateEmployeeDocument,
+  getEmployeeDocumentDetailsByUserIdRequest
 } from 'services/company/employee/documentUpload';
 
 // Styled Components
@@ -272,6 +273,15 @@ const DocumentUploadStep: React.FC<DocumentUploadStepProps> = ({
       </UploadButton>
     </UploadArea>
   );
+
+  const fetchExistingDocuments = async (): Promise<void> => {
+    const response = await getEmployeeDocumentDetailsByUserIdRequest(userId);
+    console.log('res is', response);
+  };
+
+  useEffect(() => {
+    fetchExistingDocuments();
+  }, []);
 
   return (
     <Box sx={{ p: 5 }}>

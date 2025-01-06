@@ -83,22 +83,27 @@ import {
 } from 'services/company/employee/professionalDetails';
 import {
   insertEmployeeFamilyDetailRequest,
+  saveEmployeeFamilyDetailRequest,
   updateEmployeeFamilyDetailRequest
 } from 'services/company/employee/familyDetails';
 import {
   insertEmployeeEmergencyContactDetailRequest,
+  saveEmployeeEmergencyContactDetailRequest,
   updateEmployeeEmergencyContactDetailRequest
 } from 'services/company/employee/emergencyContactDetails';
 import {
   insertEmployeeAddressDetailRequest,
+  saveEmployeeAddressDetailRequest,
   updateEmployeeAddressDetailRequest
 } from 'services/company/employee/addressDetails';
 import {
   insertEmployeeEducationalDetailRequest,
+  saveEmployeeEducationDetailRequest,
   updateEmployeeEducationalDetailRequest
 } from 'services/company/employee/educationDetails';
 import {
   insertEmployeeExperienceDetailRequest,
+  SaveEmployeeExperienceDetails,
   updateEmployeeExperienceDetailRequest
 } from 'services/company/employee/experienceDetails';
 import { AdminFormLayout } from 'components/CardLayout';
@@ -116,6 +121,7 @@ import { getDate } from 'utility/formatDate';
 import { ALLOWED_FILE_FORMATS } from 'components/InputFields/upload/UploadSingleFile';
 import { DocumentModel } from 'models/company/DocumentType';
 import { getDocumentType } from 'services/company/employee/documentTypeDetails';
+import { calculateAge } from 'utility/calculateAge';
 import adminStyle from '../../company.style';
 import DocumentUploadStep from './DocumentUploadStep';
 
@@ -134,6 +140,11 @@ const steps = [
   'Document Details'
 ];
 
+interface SavedStepData {
+  data: any;
+  ids?: number[] | number;
+}
+
 const CreateEmployee = (): JSX.Element => {
   /* Hooks */
   const navigate = useNavigate();
@@ -151,9 +162,9 @@ const CreateEmployee = (): JSX.Element => {
   const [completedSteps, setCompletedSteps] = useState<{
     [key: number]: boolean;
   }>({});
-  const [savedStepData, setSavedStepData] = useState<{ [key: number]: any }>(
-    {}
-  );
+  const [savedStepData, setSavedStepData] = useState<{
+    [key: number]: SavedStepData;
+  }>({});
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
 
@@ -170,7 +181,7 @@ const CreateEmployee = (): JSX.Element => {
 
   const initialValuesPersonalDetails = {
     txtBirthDate: '',
-    txtAge: 0,
+    txtAge: null,
     ddlBirthCountry: '',
     ddlBirthState: '',
     txtBirthLocation: '',
@@ -209,7 +220,7 @@ const CreateEmployee = (): JSX.Element => {
   const initialValuesFamilyDetailsEntries = {
     ddlRelationType: '',
     txtName: '',
-    txtAge: '',
+    txtAge: null,
     txtBirthDate: '',
     txtCurrentAddress: '',
     ddlBirthCountry: '',
@@ -280,6 +291,10 @@ const CreateEmployee = (): JSX.Element => {
     } else {
       setActiveStep((prevActiveStep) => prevActiveStep - 1);
     }
+  };
+
+  const handleStepClick = (step: number): any => {
+    setActiveStep(step);
   };
 
   /**
@@ -477,32 +492,7 @@ const CreateEmployee = (): JSX.Element => {
     { setSubmitting }: FormikHelpers<AddEmployeeDetailsFormValues>
   ): Promise<void> => {
     try {
-      // const currentStepData = getStepData(values, activeStep);
-      // console.log('current step data before normalization:', currentStepData);
-
-      // const savedData = savedStepData[activeStep] || {};
-      // console.log('saved data before normalization:', savedData);
-
-      // // Normalize both objects for comparison
-      // const normalizedCurrentData = normalizeKeys(currentStepData);
-      // const normalizedSavedData = normalizeKeys(savedData);
-
-      // console.log('Normalized current data:', normalizedCurrentData);
-      // console.log('Normalized saved data:', normalizedSavedData);
-
-      // const hasChanges = !isEqual(normalizedCurrentData, normalizedSavedData);
-      // console.log('Has changes:', hasChanges);
-
-      // if (!hasChanges) {
-      //   console.log(
-      //     'No changes detected, moving to next step without API call'
-      //   );
-      //   setActiveStep((prevStep) => prevStep + 1);
-      //   setSubmitting(false);
-      //   return;
-      // }
-
-      let response;
+      let response: any;
 
       if (activeStep === 0) {
         const requestDataUserForm: any = {
@@ -526,6 +516,10 @@ const CreateEmployee = (): JSX.Element => {
           if (!completedSteps[0]) {
             setUserId(response?.id);
           }
+          setSavedStepData((prev) => ({
+            ...prev,
+            0: { data: requestDataUserForm, ids: response.id }
+          }));
           setCompletedSteps((prev) => ({ ...prev, 0: true }));
           setSavedStepData((prev) => ({ ...prev, 0: requestDataUserForm }));
           setActiveStep(activeStep + 1);
@@ -571,8 +565,9 @@ const CreateEmployee = (): JSX.Element => {
         }
 
         if (completedSteps[1]) {
+          console.log('id is', savedStepData[1]?.ids);
           response = await updateEmployeePersonalDetailRequest(
-            userId,
+            savedStepData[1]?.ids,
             requestDataEmployeePersonalDetails
           );
         } else {
@@ -586,8 +581,9 @@ const CreateEmployee = (): JSX.Element => {
           setCompletedSteps((prev) => ({ ...prev, 1: true }));
           setSavedStepData((prev) => ({
             ...prev,
-            1: requestDataEmployeePersonalDetails
+            1: { data: requestDataEmployeePersonalDetails, ids: response.id }
           }));
+          console.log('saved step data', savedStepData);
           setActiveStep(activeStep + 1);
           setSubmitting(false);
           showSnackbar(
@@ -610,7 +606,7 @@ const CreateEmployee = (): JSX.Element => {
 
         if (completedSteps[2]) {
           response = await updateEmployeeProfessionalDetailRequest(
-            userId,
+            Number(savedStepData[2]?.ids),
             requestDataProfessionalDetails
           );
         } else {
@@ -624,7 +620,7 @@ const CreateEmployee = (): JSX.Element => {
           setCompletedSteps((prev) => ({ ...prev, 2: true }));
           setSavedStepData((prev) => ({
             ...prev,
-            2: requestDataProfessionalDetails
+            2: { data: requestDataProfessionalDetails, ids: response.id }
           }));
           setActiveStep(activeStep + 1);
           setSubmitting(false);
@@ -638,34 +634,39 @@ const CreateEmployee = (): JSX.Element => {
           );
         }
       } else if (activeStep === 4) {
-        const reqDataFamilyDetails: any = values.familyDetails.map(
-          (detail) => ({
-            relationType: detail.ddlRelationType,
-            name: detail.txtName,
-            age: detail.txtAge,
-            birthDate: detail.txtBirthDate,
-            currentAddress: detail.txtCurrentAddress,
-            birthCountry: detail.ddlBirthCountry,
-            birthState: detail.ddlBirthState,
-            birthLocation: detail.txtBirthLocation,
-            occupation: detail.txtOccupation,
-            phone: detail.txtPhone
-          })
-        );
+        const reqDataFamilyDetails = values.familyDetails.map((detail) => ({
+          relationType: detail.ddlRelationType,
+          name: detail.txtName,
+          age: detail.txtAge,
+          birthDate: detail.txtBirthDate,
+          currentAddress: detail.txtCurrentAddress,
+          birthCountry: detail.ddlBirthCountry,
+          birthState: detail.ddlBirthState,
+          birthLocation: detail.txtBirthLocation,
+          occupation: detail.txtOccupation,
+          phone: detail.txtPhone,
+          userId
+        }));
 
-        if (completedSteps[4]) {
-          // For update, pass userId separately (without it in familyDetails objects)
-          response = await updateEmployeeFamilyDetailRequest(
-            userId,
-            reqDataFamilyDetails
-          );
-        } else {
-          // For insert, include userId in each family detail object
-          response = await insertEmployeeFamilyDetailRequest({
-            familyDetails: reqDataFamilyDetails.map((detail: any) => ({
+        // For update operation, we need to include the ids from savedStepData
+        if (completedSteps[4] && savedStepData[4]?.ids) {
+          const savedIds = savedStepData[4].ids as number[];
+
+          // Map the existing ids to the family details
+          const familyDetailsWithIds = reqDataFamilyDetails.map(
+            (detail, index) => ({
               ...detail,
-              userId
-            }))
+              id: savedIds[index] // Add the id from saved data
+            })
+          );
+
+          response = await saveEmployeeFamilyDetailRequest({
+            familyDetails: familyDetailsWithIds
+          });
+        } else {
+          // For insert, just send the data without ids
+          response = await saveEmployeeFamilyDetailRequest({
+            familyDetails: reqDataFamilyDetails
           });
         }
 
@@ -673,7 +674,7 @@ const CreateEmployee = (): JSX.Element => {
           setCompletedSteps((prev) => ({ ...prev, 4: true }));
           setSavedStepData((prev) => ({
             ...prev,
-            4: reqDataFamilyDetails
+            4: { data: reqDataFamilyDetails, ids: response.ids }
           }));
           setActiveStep(activeStep + 1);
           setSubmitting(false);
@@ -687,7 +688,7 @@ const CreateEmployee = (): JSX.Element => {
           );
         }
       } else if (activeStep === 5) {
-        const requestDataEducationDetails: any = values.educationDetails.map(
+        const requestDataEducationDetails = values.educationDetails.map(
           (detail) => ({
             course: detail.ddlCourse,
             degreeSpecialization: detail.txtDegreeSpecialization,
@@ -696,23 +697,26 @@ const CreateEmployee = (): JSX.Element => {
             toDate: detail.txtToDate,
             status: detail.ddlStatus,
             studyMode: detail.ddlStudyMode,
-            percentage: detail.txtPercentage
+            percentage: detail.txtPercentage,
+            userId
           })
         );
 
-        if (completedSteps[5]) {
-          response = await updateEmployeeEducationalDetailRequest(
-            userId,
-            requestDataEducationDetails
+        if (completedSteps[5] && savedStepData[5]?.ids) {
+          const savedIds = savedStepData[5].ids as number[];
+          const educationDetailsWithIds = requestDataEducationDetails.map(
+            (detail, index) => ({
+              ...detail,
+              id: savedIds[index]
+            })
           );
+
+          response = await saveEmployeeEducationDetailRequest({
+            educationalDetails: educationDetailsWithIds
+          });
         } else {
-          response = await insertEmployeeEducationalDetailRequest({
-            educationalDetails: requestDataEducationDetails.map(
-              (detail: any) => ({
-                ...detail,
-                userId
-              })
-            )
+          response = await saveEmployeeEducationDetailRequest({
+            educationalDetails: requestDataEducationDetails
           });
         }
 
@@ -720,7 +724,7 @@ const CreateEmployee = (): JSX.Element => {
           setCompletedSteps((prev) => ({ ...prev, 5: true }));
           setSavedStepData((prev) => ({
             ...prev,
-            5: requestDataEducationDetails
+            5: { data: requestDataEducationDetails, ids: response.ids }
           }));
           setActiveStep(activeStep + 1);
           setSubmitting(false);
@@ -734,27 +738,31 @@ const CreateEmployee = (): JSX.Element => {
           );
         }
       } else if (activeStep === 6) {
-        const requestDataEmergencyContacts: any =
-          values.emergencyContactDetails.map((contact) => ({
+        const requestDataEmergencyContacts = values.emergencyContactDetails.map(
+          (contact) => ({
             contactName: contact.txtContactName,
             contactAddress: contact.txtContactAddress,
             contactRelation: contact.ddlContactRelation,
-            phone: contact.txtPhone
-          }));
+            phone: contact.txtPhone,
+            userId
+          })
+        );
 
-        if (completedSteps[6]) {
-          response = await updateEmployeeEmergencyContactDetailRequest(
-            userId,
-            requestDataEmergencyContacts
+        if (completedSteps[6] && savedStepData[6]?.ids) {
+          const savedIds = savedStepData[6].ids as number[];
+          const emergencyContactsWithIds = requestDataEmergencyContacts.map(
+            (contact, index) => ({
+              ...contact,
+              id: savedIds[index]
+            })
           );
+
+          response = await saveEmployeeEmergencyContactDetailRequest({
+            emergencyContacts: emergencyContactsWithIds
+          });
         } else {
-          response = await insertEmployeeEmergencyContactDetailRequest({
-            emergencyContacts: requestDataEmergencyContacts.map(
-              (contact: any) => ({
-                ...contact,
-                userId
-              })
-            )
+          response = await saveEmployeeEmergencyContactDetailRequest({
+            emergencyContacts: requestDataEmergencyContacts
           });
         }
 
@@ -762,7 +770,7 @@ const CreateEmployee = (): JSX.Element => {
           setCompletedSteps((prev) => ({ ...prev, 6: true }));
           setSavedStepData((prev) => ({
             ...prev,
-            6: requestDataEmergencyContacts
+            6: { data: requestDataEmergencyContacts, ids: response.ids }
           }));
           setActiveStep(activeStep + 1);
           setSubmitting(false);
@@ -776,7 +784,7 @@ const CreateEmployee = (): JSX.Element => {
           );
         }
       } else if (activeStep === 7) {
-        const requestDataExperienceDetails: any = values.experienceDetails.map(
+        const requestDataExperienceDetails = values.experienceDetails.map(
           (detail) => ({
             companyName: detail.txtCompanyName,
             employeeId: detail.txtEmployeeId,
@@ -788,23 +796,26 @@ const CreateEmployee = (): JSX.Element => {
             state: detail.ddlState,
             employmentType: detail.ddlEmploymentType,
             supervisorName: detail.txtSupervisorName,
-            supervisorPhone: detail.txtSupervisorPhone
+            supervisorPhone: detail.txtSupervisorPhone,
+            userId
           })
         );
 
-        if (completedSteps[7]) {
-          response = await updateEmployeeExperienceDetailRequest(
-            userId,
-            requestDataExperienceDetails
+        if (completedSteps[7] && savedStepData[7]?.ids) {
+          const savedIds = savedStepData[7].ids as number[];
+          const experienceDetailsWithIds = requestDataExperienceDetails.map(
+            (detail, index) => ({
+              ...detail,
+              id: savedIds[index]
+            })
           );
+
+          response = await SaveEmployeeExperienceDetails({
+            experienceDetails: experienceDetailsWithIds
+          });
         } else {
-          response = await insertEmployeeExperienceDetailRequest({
-            experienceDetails: requestDataExperienceDetails.map(
-              (experience: any) => ({
-                ...experience,
-                userId
-              })
-            )
+          response = await SaveEmployeeExperienceDetails({
+            experienceDetails: requestDataExperienceDetails
           });
         }
 
@@ -812,7 +823,7 @@ const CreateEmployee = (): JSX.Element => {
           setCompletedSteps((prev) => ({ ...prev, 7: true }));
           setSavedStepData((prev) => ({
             ...prev,
-            7: requestDataExperienceDetails
+            7: { data: requestDataExperienceDetails, ids: response.ids }
           }));
           setActiveStep(activeStep + 1);
           setSubmitting(false);
@@ -826,7 +837,7 @@ const CreateEmployee = (): JSX.Element => {
           );
         }
       } else if (activeStep === 3) {
-        const requestDataAddressDetails: any = values.addressDetails.map(
+        const requestDataAddressDetails = values.addressDetails.map(
           (detail) => ({
             addressType: detail.ddlAddressType,
             buildingName: detail.txtBuildingName,
@@ -837,23 +848,26 @@ const CreateEmployee = (): JSX.Element => {
             state: detail.ddlState,
             pincode: detail.txtPincode,
             telephoneNumber: detail.txtTelephoneNumber,
-            phone: detail.txtPhone
+            phone: detail.txtPhone,
+            userId
           })
         );
 
-        if (completedSteps[3]) {
-          response = await updateEmployeeAddressDetailRequest(
-            userId,
-            requestDataAddressDetails
+        if (completedSteps[3] && savedStepData[3]?.ids) {
+          const savedIds = savedStepData[3].ids as number[];
+          const addressDetailsWithIds = requestDataAddressDetails.map(
+            (detail, index) => ({
+              ...detail,
+              id: savedIds[index]
+            })
           );
+
+          response = await saveEmployeeAddressDetailRequest({
+            employeeAddresses: addressDetailsWithIds
+          });
         } else {
-          response = await insertEmployeeAddressDetailRequest({
-            employeeAddresses: requestDataAddressDetails.map(
-              (address: any) => ({
-                ...address,
-                userId
-              })
-            )
+          response = await saveEmployeeAddressDetailRequest({
+            employeeAddresses: requestDataAddressDetails
           });
         }
 
@@ -861,7 +875,7 @@ const CreateEmployee = (): JSX.Element => {
           setCompletedSteps((prev) => ({ ...prev, 3: true }));
           setSavedStepData((prev) => ({
             ...prev,
-            3: requestDataAddressDetails
+            3: { data: requestDataAddressDetails, ids: response.ids }
           }));
           setActiveStep(activeStep + 1);
           setSubmitting(false);
@@ -1173,42 +1187,35 @@ const CreateEmployee = (): JSX.Element => {
   const currentValidationSchema = validationSchema[activeStep];
 
   const CustomConnector = styled(StepConnector)(({ theme }) => ({
-    // Media query for md breakpoint
     [`&.${theme.breakpoints.up('md')}`]: {
       top: 10,
       left: 'calc(-50% + 16px)',
       right: 'calc(50% + 16px)'
     },
 
-    // Alternative label styles
     [`&.${stepConnectorClasses.alternativeLabel}`]: {
       top: 22,
       left: 'calc(-50% + 16px)',
       right: 'calc(50% + 16px)'
     },
 
-    // Active state
+    // Only show active/completed styles when explicitly set
     [`&.${stepConnectorClasses.active}`]: {
       [`& .${stepConnectorClasses.line}`]: {
-        borderColor: theme.palette.primary.main,
-        borderWidth: 2
+        borderColor: theme.palette.grey[400] // Use a neutral color for active
       }
     },
 
-    // Completed state
     [`&.${stepConnectorClasses.completed}`]: {
       [`& .${stepConnectorClasses.line}`]: {
-        borderColor: theme.palette.primary.main
+        borderColor: theme.palette.grey[400] // Use a neutral color for non-completed
       }
     },
 
-    // Line styles
     [`& .${stepConnectorClasses.line}`]: {
-      borderColor:
-        theme.palette.mode === 'dark' ? theme.palette.grey[800] : '#eaeaf0',
+      borderColor: theme.palette.grey[400],
       borderTopWidth: 2,
-      borderRadius: 4,
-      transition: 'all 0.3s ease'
+      borderRadius: 4
     }
   }));
 
@@ -1294,6 +1301,77 @@ const CreateEmployee = (): JSX.Element => {
                       );
                       navigate(manageEmployeePath);
                     };
+                    const handleSaveAndExit = async (): Promise<void> => {
+                      try {
+                        // Validate required fields
+                        if (
+                          !values.txtFirstName ||
+                          !values.txtLastName ||
+                          !values.txtEmail ||
+                          !values.txtPassword ||
+                          !values.ddlRoles.length
+                        ) {
+                          showSnackbar(
+                            'Please fill all required fields',
+                            'error'
+                          );
+                          return;
+                        }
+
+                        setLoading(true);
+
+                        const requestDataUserForm: any = {
+                          firstName: values.txtFirstName,
+                          lastName: values.txtLastName,
+                          email: values.txtEmail,
+                          password: values.txtPassword,
+                          phone: values.txtPhone,
+                          roleIds: JSON.stringify(values.ddlRoles),
+                          isActive: values.chkIsActive,
+                          showActivity: values.chkShowActivity
+                        };
+
+                        const response = await registerUserRequest(
+                          requestDataUserForm
+                        );
+
+                        if (response?.id) {
+                          // Update local state
+                          setUserId(response.id);
+                          setCompletedSteps((prev) => ({ ...prev, 0: true }));
+                          setSavedStepData((prev) => ({
+                            ...prev,
+                            0: { data: requestDataUserForm, ids: response.id }
+                          }));
+
+                          showSnackbar(
+                            toastMessages.success.adminDashboard.userSaved,
+                            'success'
+                          );
+                          navigate(manageEmployeePath);
+                        } else if (response?.status.response_code === 205) {
+                          showSnackbar(
+                            toastMessages.error.adminDashboard.userDuplicate,
+                            'error'
+                          );
+                        } else if (response?.status.response_code === 209) {
+                          showSnackbar(
+                            toastMessages.error.adminDashboard
+                              .companyUserExceed,
+                            'error'
+                          );
+                        } else {
+                          showSnackbar(toastMessages.error.common, 'error');
+                        }
+                      } catch (error) {
+                        showSnackbar(
+                          'Failed to save user. Please try again.',
+                          'error'
+                        );
+                      } finally {
+                        setLoading(false);
+                      }
+                    };
                     return (
                       <>
                         <Form autoComplete="off" onSubmit={handleSubmit}>
@@ -1306,13 +1384,40 @@ const CreateEmployee = (): JSX.Element => {
                                 mt: 2,
                                 p: 1,
                                 '& .MuiStep-root': {
-                                  padding: '0 8px'
+                                  padding: '0 8px',
+                                  cursor: 'pointer'
                                 }
                               }}
                             >
-                              {steps.map((label) => (
-                                <Step key={label}>
-                                  <CustomStepLabel>{label}</CustomStepLabel>
+                              {steps.map((label, index) => (
+                                <Step
+                                  key={label}
+                                  completed={completedSteps[index] === true}
+                                  onClick={() => handleStepClick(index)}
+                                  sx={{
+                                    '&:hover': {
+                                      '& .MuiStepLabel-label': {
+                                        color: (theme) =>
+                                          theme.palette.primary.main
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <CustomStepLabel
+                                    sx={{
+                                      cursor: 'pointer',
+                                      '& .MuiStepIcon-root': {
+                                        ...(completedSteps[index] && {
+                                          '&.Mui-completed': {
+                                            color: (theme) =>
+                                              theme.palette.primary.main
+                                          }
+                                        })
+                                      }
+                                    }}
+                                  >
+                                    {label}
+                                  </CustomStepLabel>
                                 </Step>
                               ))}
                             </Stepper>
@@ -1487,10 +1592,17 @@ const CreateEmployee = (): JSX.Element => {
                                       inputFormat="DD/MM/YYYY"
                                       value={values.txtBirthDate}
                                       onChange={(newValue: any) => {
+                                        const birthDate = getDate(
+                                          newValue,
+                                          'dd MMM yyyy'
+                                        );
                                         setFieldValue(
                                           'txtBirthDate',
-                                          getDate(newValue, 'dd MMM yyyy')
+                                          birthDate
                                         );
+                                        // Calculate and set age automatically
+                                        const age = calculateAge(birthDate);
+                                        setFieldValue('txtAge', age);
                                       }}
                                       renderInput={(params: any) => (
                                         <CustomField
@@ -1528,7 +1640,7 @@ const CreateEmployee = (): JSX.Element => {
                                     name="txtAge"
                                     type="number"
                                     value={values.txtAge}
-                                    inputProps={{ min: 1 }}
+                                    inputProps={{ readOnly: true }}
                                     onChange={handleChange}
                                     onBlur={handleBlur}
                                     error={Boolean(
@@ -1889,7 +2001,7 @@ const CreateEmployee = (): JSX.Element => {
                                       renderInput={(params: any) => (
                                         <CustomField
                                           name="txtJoinDate"
-                                          label="Join Date"
+                                          label="Joining Date"
                                           error={Boolean(
                                             touched.txtJoinDate &&
                                               errors.txtJoinDate
@@ -1948,7 +2060,7 @@ const CreateEmployee = (): JSX.Element => {
                                 </Grid>
                                 <Grid item xs={12} sm={6} md={6}>
                                   <SelectInput
-                                    label="Working Type"
+                                    label="Work Mode"
                                     name="ddlWorkingType"
                                     value={values.ddlWorkingType}
                                     onChange={handleChange}
@@ -2605,6 +2717,62 @@ const CreateEmployee = (): JSX.Element => {
                                             />
                                           </Grid>
                                           <Grid item xs={12} sm={6} md={6}>
+                                            <LocalizationProvider
+                                              dateAdapter={AdapterDayjs}
+                                            >
+                                              <DatePicker
+                                                openTo="day"
+                                                inputFormat="DD/MM/YYYY"
+                                                value={values.txtBirthDate}
+                                                onChange={(newValue: any) => {
+                                                  const birthDate = getDate(
+                                                    newValue,
+                                                    'dd MMM yyyy'
+                                                  );
+                                                  setFieldValue(
+                                                    'txtBirthDate',
+                                                    birthDate
+                                                  );
+                                                  // Calculate and set age automatically
+                                                  const age =
+                                                    calculateAge(birthDate);
+                                                  setFieldValue(
+                                                    `familyDetails.${index}.txtAge`,
+                                                    age
+                                                  );
+                                                }}
+                                                renderInput={(params: any) => (
+                                                  <CustomField
+                                                    name="txtBirthDate"
+                                                    label="Birth Date"
+                                                    error={Boolean(
+                                                      touched.txtBirthDate &&
+                                                        errors.txtBirthDate
+                                                    )}
+                                                    helperText={String(
+                                                      touched.txtBirthDate &&
+                                                        errors.txtBirthDate
+                                                    )}
+                                                  >
+                                                    <TextField
+                                                      {...params}
+                                                      fullWidth
+                                                      size="medium"
+                                                      name="txtBirthDate"
+                                                      value={
+                                                        values.txtBirthDate
+                                                      }
+                                                      error={Boolean(
+                                                        touched.txtBirthDate &&
+                                                          errors.txtBirthDate
+                                                      )}
+                                                    />
+                                                  </CustomField>
+                                                )}
+                                              />
+                                            </LocalizationProvider>
+                                          </Grid>
+                                          <Grid item xs={12} sm={6} md={6}>
                                             <TextInput
                                               fullWidth
                                               label="Age"
@@ -2616,6 +2784,7 @@ const CreateEmployee = (): JSX.Element => {
                                               }
                                               onChange={handleChange}
                                               onBlur={handleBlur}
+                                              inputProps={{ readOnly: true }}
                                               error={Boolean(
                                                 getIn(
                                                   touched,
@@ -2634,40 +2803,6 @@ const CreateEmployee = (): JSX.Element => {
                                                 getIn(
                                                   errors,
                                                   `familyDetails.${index}.txtAge`
-                                                )
-                                              }
-                                            />
-                                          </Grid>
-                                          <Grid item xs={12} sm={6} md={6}>
-                                            <TextInput
-                                              fullWidth
-                                              label="Birth Date"
-                                              name={`familyDetails.${index}.txtBirthDate`}
-                                              type="date"
-                                              value={
-                                                values.familyDetails[index]
-                                                  .txtBirthDate
-                                              }
-                                              onChange={handleChange}
-                                              onBlur={handleBlur}
-                                              error={Boolean(
-                                                getIn(
-                                                  touched,
-                                                  `familyDetails.${index}.txtBirthDate`
-                                                ) &&
-                                                  getIn(
-                                                    errors,
-                                                    `familyDetails.${index}.txtBirthDate`
-                                                  )
-                                              )}
-                                              helperText={
-                                                getIn(
-                                                  touched,
-                                                  `familyDetails.${index}.txtBirthDate`
-                                                ) &&
-                                                getIn(
-                                                  errors,
-                                                  `familyDetails.${index}.txtBirthDate`
                                                 )
                                               }
                                             />
@@ -4166,16 +4301,17 @@ const CreateEmployee = (): JSX.Element => {
                               {activeStep === 0 ? 'Back' : 'Previous Step'}
                             </Button>
                             <Box sx={{ flex: '1 1 auto' }} />
-                            {/* {activeStep === 0 && (
+                            {activeStep === 0 && (
                               <Button
                                 color="inherit"
                                 variant="contained"
-                                type="submit"
+                                type="button"
                                 disabled={isSubmitting}
+                                onClick={handleSaveAndExit}
                               >
                                 Save and Exit
                               </Button>
-                            )} */}
+                            )}
                             {isLastStep ? (
                               <Button
                                 color="primary"
@@ -4187,14 +4323,25 @@ const CreateEmployee = (): JSX.Element => {
                                 Submit
                               </Button>
                             ) : (
-                              <Button
-                                color="primary"
-                                variant="contained"
-                                type="submit"
-                                disabled={isSubmitting}
-                              >
-                                Save and Next Step
-                              </Button>
+                              <>
+                                <Button
+                                  color="primary"
+                                  variant="contained"
+                                  type="submit"
+                                  disabled={isSubmitting}
+                                >
+                                  Save and Next Step
+                                </Button>
+                                {/* <Button
+                                  color="inherit"
+                                  variant="contained"
+                                  onClick={() => {
+                                    navigate(manageEmployeePath);
+                                  }}
+                                >
+                                  Save and Exit
+                                </Button> */}
+                              </>
                             )}
                           </CardActions>
                         </Form>

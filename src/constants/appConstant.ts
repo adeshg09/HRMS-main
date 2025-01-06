@@ -97,6 +97,10 @@ export const toastMessages = {
       projectStatusUpdated: "Project's status updated successfully.",
       projectDeleted: 'Project deleted successfully.',
 
+      documentSaved: 'Document saved successfully.',
+      documentTypeUpdated: 'Document Type Updated Successfully',
+      documentTypeDeleted: 'Document Type deleted successfully',
+
       // Employee Management
       employee: {
         // Account Setup Details
@@ -203,7 +207,8 @@ export const toastMessages = {
       clientDuplicate: 'Client with the same name, already exist.',
       projectDuplicate: 'Project with the same name, already exist.',
       companyUserExceed:
-        'You have reached to max user limit. Please add more users in current plan.'
+        'You have reached to max user limit. Please add more users in current plan.',
+      documentDuplicate: 'Document with the same name, already exist.'
     },
     public: {
       companyDuplicate: 'Company with same name is already registered.'

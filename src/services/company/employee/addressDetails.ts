@@ -34,6 +34,17 @@ export const updateEmployeeAddressDetailRequest = (
     )
     .then((response) => response.data);
 };
+export const saveEmployeeAddressDetailRequest = (
+  reqData: any
+): Promise<any> => {
+  return axiosInstance
+    .post(`admin/company/employeeAddress/SaveEmployeeAddresses`, reqData, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    .then((response) => response.data);
+};
 
 export const getEmployeeAddressDetailsByUserIdRequest = (
   userId: number | null

@@ -1,143 +1,98 @@
-// profile.style.ts
+/**
+ * @copyright @2022 Techechelons Infosolutions Pvt. Ltd. All rights reserved.
+ * @description Page to create styles for master dashboard pages/components.
+ * --------------------------------------------------------------------
+ * Creation Details
+ * @author Naishad Vaishnav
+ * Date Created: 28/Nov/2022
+ * FDO Ref:
+ * TDO Ref:
+ * RTM Ref:
+ * Test Case Ref:
+ */
+// ----------------------------------------------------------------------
 
-const styles = {
-  // Profile Container
-  profileContainer: (theme: any) => ({
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: theme.spacing(3),
-    [theme.breakpoints.down('sm')]: {
-      padding: theme.spacing(2)
-    }
-  }),
-
-  // Profile Header Card
-  headerCard: (theme: any) => ({
-    background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-    borderRadius: '16px',
-    padding: theme.spacing(4),
-    color: 'white',
-    marginBottom: theme.spacing(3),
-    position: 'relative',
-    overflow: 'hidden',
-    '&::before': {
-      content: '""',
-      position: 'absolute',
-      top: 0,
-      right: 0,
-      width: '300px',
-      height: '300px',
-      background:
-        'radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%)',
-      transform: 'translate(30%, -30%)'
-    },
-    [theme.breakpoints.down('sm')]: {
-      padding: theme.spacing(3)
-    }
-  }),
-
-  // Profile Info Section
-  profileInfo: (theme: any) => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(3),
-    [theme.breakpoints.down('sm')]: {
-      flexDirection: 'column',
-      textAlign: 'center'
-    }
-  }),
-
-  // Avatar styles
+/**
+ * Style object for auth pages/components
+ *
+ * @returns {object}
+ */
+export default {
   avatar: (theme: any) => ({
-    width: 120,
-    height: 120,
-    border: '4px solid rgba(255,255,255,0.2)',
-    boxShadow: '0 0 20px rgba(0,0,0,0.2)',
-    [theme.breakpoints.down('sm')]: {
-      width: 100,
-      height: 100
+    height: 200,
+    width: 200,
+    [theme.breakpoints.down('xs')]: {
+      height: 100,
+      width: 100
     }
   }),
 
-  // Content Card
-  contentCard: (theme: any) => ({
-    borderRadius: '16px',
-    boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-    padding: theme.spacing(3),
-    background: theme.palette.background.paper
+  mainGrid: (theme: any) => ({
+    borderBottom: `1px solid ${theme.palette.divider}`
   }),
-
-  // Form Fields
-  formField: (theme: any) => ({
-    '& .MuiInputBase-root': {
-      borderRadius: '12px',
-      backgroundColor:
-        theme.palette.mode === 'light' ? '#F8FAFC' : theme.palette.grey[900]
-    },
-    '& .MuiInputBase-input': {
-      padding: '16px',
-      '&:disabled': {
-        color: theme.palette.text.primary,
-        '-webkit-text-fill-color': theme.palette.text.primary
-      }
-    },
-    '& .MuiOutlinedInput-root': {
-      '& fieldset': {
-        borderColor: 'transparent'
-      },
-      '&:hover fieldset': {
-        borderColor: theme.palette.primary.main
-      },
-      '&.Mui-focused fieldset': {
-        borderColor: theme.palette.primary.main
-      }
-    }
+  profileParent: (theme: any) => ({
+    position: 'relative'
   }),
-
-  // Action Buttons
-  actionButton: (theme: any) => ({
-    borderRadius: '12px',
-    padding: '8px 24px',
-    textTransform: 'none',
-    fontSize: '1rem',
-    fontWeight: 500,
-    boxShadow: 'none',
-    '&:hover': {
-      boxShadow: 'none'
-    }
-  }),
-
-  // Edit Profile Button
   editProfile: (theme: any) => ({
     position: 'absolute',
-    top: theme.spacing(4),
-    right: theme.spacing(4),
-    [theme.breakpoints.down('sm')]: {
-      top: theme.spacing(3),
-      right: theme.spacing(3)
+    top: 1.5,
+    right: 0,
+    padding: 2,
+    [theme.breakpoints.down('xs')]: {
+      padding: 0,
+      top: 1
     }
   }),
-
-  // Stats Container
-  statsContainer: (theme: any) => ({
-    display: 'flex',
-    gap: theme.spacing(3),
-    marginTop: theme.spacing(2),
+  cardHeaderEdit: (theme: any) => ({
+    textAlign: 'center',
     [theme.breakpoints.down('sm')]: {
-      flexDirection: 'column',
-      gap: theme.spacing(1)
+      textAlign: 'left'
     }
   }),
-
-  // Stat Item
-  statItem: (theme: any) => ({
-    background: 'rgba(255,255,255,0.1)',
-    padding: theme.spacing(1, 2),
-    borderRadius: '8px',
+  loadingspan: {
+    width: 200,
+    height: 200,
+    position: 'relative',
+    marginTop: -200,
+    opacity: 0.7,
+    backgroundColor: '#fff',
+    borderRadius: '50%'
+  },
+  loadingimg: {
+    width: 100,
+    marginTop: 50
+  },
+  profileCard: {
+    borderRadius: '16px',
+    boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.05)',
+    marginBottom: 3,
+    overflow: 'visible'
+  },
+  headerContent: {
     display: 'flex',
     alignItems: 'center',
-    gap: theme.spacing(1)
-  })
+    justifyContent: 'space-between',
+    padding: 3
+  },
+  profileInfo: {
+    display: 'flex',
+    alignItems: 'center'
+  },
+  userInfo: {
+    marginLeft: 2
+  },
+  editButton: {
+    borderRadius: '8px',
+    textTransform: 'none'
+  },
+  infoLabel: {
+    color: 'text.secondary',
+    fontWeight: 500,
+    marginBottom: 0.5
+  },
+  infoValue: {
+    color: 'text.primary',
+    fontWeight: 400,
+    marginBottom: 2
+  }
 };
-
-export default styles;

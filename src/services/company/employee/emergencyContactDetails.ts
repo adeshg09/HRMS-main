@@ -47,6 +47,21 @@ export const updateEmployeeEmergencyContactDetailRequest = (
     )
     .then((response) => response.data);
 };
+export const saveEmployeeEmergencyContactDetailRequest = (
+  reqData: any
+): Promise<any> => {
+  return axiosInstance
+    .post(
+      `admin/company/employeeEmergencyContact/saveEmployeeEmergencyContactDetailRequest`,
+      reqData,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+    .then((response) => response.data);
+};
 
 export const getEmployeeEmergencyContactDetailsByUserIdRequest = (
   userId: number | null

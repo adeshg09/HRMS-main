@@ -28,7 +28,7 @@ export const registerUserRequest = (reqData: FormData): Promise<any> => {
 
 export const updateUserRequest = (
   userId: number,
-  reqData: FormData
+  reqData: any
 ): Promise<any> => {
   return axiosInstance
     .put(`/admin/company/user/UpdateUser/${userId}`, reqData)

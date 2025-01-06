@@ -7,7 +7,7 @@ import axiosInstance from 'config/axiosConfig';
 
 // ----------------------------------------------------------------------
 export const insertEmployeeProfessionalDetailRequest = (
-  reqData: FormData
+  reqData: any
 ): Promise<any> => {
   return axiosInstance
     .post(
@@ -23,12 +23,12 @@ export const insertEmployeeProfessionalDetailRequest = (
 };
 
 export const updateEmployeeProfessionalDetailRequest = (
-  userId: number | null,
-  reqData: FormData
+  id: number | null | number[] | undefined,
+  reqData: any
 ): Promise<any> => {
   return axiosInstance
     .put(
-      `admin/company/employeeProfessionalDetail/UpdateEmployeeProfessionalDetail/${userId}`,
+      `admin/company/employeeProfessionalDetail/UpdateEmployeeProfessionalDetail/${id}`,
       reqData,
       {
         headers: {

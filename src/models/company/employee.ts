@@ -22,7 +22,7 @@ export interface UserValues {
 
 export interface AddEmployeePersonalDetailsFormValues {
   txtBirthDate: string;
-  txtAge: number;
+  txtAge: number | null;
   ddlBirthCountry: string;
   ddlBirthState: string;
   txtBirthLocation: string;
@@ -70,7 +70,7 @@ export interface ProfessionalDetailsValues {
 export interface AddEmployeeFamilyDetailsFormValues {
   ddlRelationType: string;
   txtName: string;
-  txtAge: string;
+  txtAge: number | null;
   txtBirthDate: string;
   txtCurrentAddress: string;
   ddlBirthCountry: string;
@@ -85,6 +85,20 @@ export interface AddEmployeeEmergencyContactDetailsFormValues {
   txtContactAddress: string;
   ddlContactRelation: string;
   txtPhone: string;
+}
+
+export interface AddressDetailsValues {
+  address_type: string;
+  building_name: string;
+  flat_number: string;
+  street_name: string;
+  landmark: string;
+  city: string;
+  country: string;
+  state: string;
+  pincode: string;
+  telephone_number: string;
+  phone: string;
 }
 
 export interface AddEmployeeAddressDetailsFormValues {
@@ -142,7 +156,7 @@ export interface AddEmployeeDetailsFormValues {
   chkShowActivity?: boolean;
 
   txtBirthDate: string;
-  txtAge: number;
+  txtAge: number | null;
   ddlBirthCountry: string;
   ddlBirthState: string;
   txtBirthLocation: string;
@@ -166,6 +180,43 @@ export interface AddEmployeeDetailsFormValues {
   educationDetails: AddEmployeeEducationDetailsFormValues[];
   emergencyContactDetails: AddEmployeeEmergencyContactDetailsFormValues[];
   experienceDetails: AddEmployeeExperienceDetailsFormValues[];
+  documentDetails: AddEmployeeDocumentsFormValues[];
+}
+export interface EditEmployeeDetailsFormValues {
+  txtFirstName: string;
+  txtLastName: string;
+  txtEmail: string;
+  txtPassword: string;
+  txtPhone?: string;
+  ddlRoles: Array<number>;
+  chkIsActive: boolean;
+  chkShowActivity?: boolean;
+
+  txtBirthDate: string;
+  txtAge: number | null;
+  ddlBirthCountry: string;
+  ddlBirthState: string;
+  txtBirthLocation: string;
+  ddlGender: string;
+  ddlMaritalStatus: string;
+  txtMarriageDate?: string;
+  ddlBloodGroup: string;
+  txtPanNumber: string;
+  txtCaste: string;
+  txtReligion: string;
+  txtResidence?: string;
+
+  txtEmployeeCode: string;
+  ddlDesignation: number | '';
+  txtJoinDate: string;
+  ddlEmploymentType: string;
+  ddlWorkingType: string;
+
+  addressDetails: EditEmployeeAddressDetailsFormValues[];
+  familyDetails: EditEmployeeFamilyDetailsFormValues[];
+  educationDetails: EditEmployeeEducationDetailsFormValues[];
+  emergencyContactDetails: EditEmployeeEmergencyContactDetailsFormValues[];
+  experienceDetails: EditEmployeeExperienceDetailsFormValues[];
   documentDetails: AddEmployeeDocumentsFormValues[];
 }
 
@@ -206,11 +257,12 @@ export interface EditEmployeeProfessionalDetailsFormValues {
 }
 
 export interface EditEmployeeFamilyDetailsFormValues {
+  txtId?: number | null;
   ddlRelationType: string;
   txtName: string;
   txtAge: string;
   txtBirthDate: string;
-  txtCurrentEditress: string;
+  txtCurrentAddress: string;
   ddlBirthCountry: string;
   ddlBirthState: string;
   txtBirthLocation: string;
@@ -219,19 +271,22 @@ export interface EditEmployeeFamilyDetailsFormValues {
 }
 
 export interface EditEmployeeEmergencyContactDetailsFormValues {
+  txtId?: number | null;
   txtContactName: string;
-  txtContactEditress: string;
+  txtContactAddress: string;
   ddlContactRelation: string;
   txtPhone: string;
 }
 
-export interface EditEmployeeEditressDetailsFormValues {
-  ddlEditressType: string;
+export interface EditEmployeeAddressDetailsFormValues {
+  txtId?: number | null;
+  ddlAddressType: string;
   txtBuildingName: string;
   txtFlatNumber: string;
   txtStreetName: string;
   txtLandmark: string;
   txtCity: string;
+  ddlCountry: string;
   ddlState: string;
   txtPincode: string;
   txtTelephoneNumber: string;
@@ -239,6 +294,7 @@ export interface EditEmployeeEditressDetailsFormValues {
 }
 
 export interface EditEmployeeEducationDetailsFormValues {
+  txtId?: number | null;
   ddlCourse: string;
   txtDegreeSpecialization: string;
   txtInstituteName: string;
@@ -250,6 +306,7 @@ export interface EditEmployeeEducationDetailsFormValues {
 }
 
 export interface EditEmployeeExperienceDetailsFormValues {
+  txtId?: number | null;
   txtCompanyName: string;
   txtEmployeeId: string;
   txtJobTitle: string;

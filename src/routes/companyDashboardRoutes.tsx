@@ -89,6 +89,69 @@ const ManageMyTrackerPage = lazy(
   () => import('views/company-dashboard/dashboard/my-tracker')
 );
 
+const ManageMyProfilePage = lazy(
+  () => import('views/company-dashboard/dashboard/my-profile/MyProfile')
+);
+
+const MyPersonalDetailsPage = lazy(
+  () =>
+    import(
+      'views/company-dashboard/dashboard/my-profile/MyPersonalDetails/MyPersonalDetails'
+    )
+);
+const MyProfessionalDetailsPage = lazy(
+  () =>
+    import(
+      'views/company-dashboard/dashboard/my-profile/MyProfessionalDetails/MyProfessionalDetails'
+    )
+);
+const MyAddressDetailsPage = lazy(
+  () =>
+    import(
+      'views/company-dashboard/dashboard/my-profile/MyAddressDetails/MyAddressDetails'
+    )
+);
+const MyFamilyDetailsPage = lazy(
+  () =>
+    import(
+      'views/company-dashboard/dashboard/my-profile/MyFamilyDetails/MyFamilyDetails'
+    )
+);
+const MyEducationDetailsPage = lazy(
+  () =>
+    import(
+      'views/company-dashboard/dashboard/my-profile/MyEducationDetails/MyEducationDetails'
+    )
+);
+const MyEmergencyContactDetailsPage = lazy(
+  () =>
+    import(
+      'views/company-dashboard/dashboard/my-profile/MyEmergencyContactDetails/MyEmergencyContactDetails'
+    )
+);
+const MyExperienceDetailsPage = lazy(
+  () =>
+    import(
+      'views/company-dashboard/dashboard/my-profile/MyExperiencDetails/MyExperienceDetails'
+    )
+);
+const MyDocumentsDetailsPage = lazy(
+  () =>
+    import(
+      'views/company-dashboard/dashboard/my-profile/MyDocumentDetails/MyDocumentDetails'
+    )
+);
+
+const ManageDocuments = lazy(
+  () =>
+    import('views/company-dashboard/dashboard/document-types/ManageDocuments')
+);
+
+const CreateDocuments = lazy(
+  () =>
+    import('views/company-dashboard/dashboard/document-types/CreateDocument')
+);
+
 // const ManageEmployeeTrackerPage = lazy(
 //   () =>
 //     import('views/company-dashboard/dashboard/employee-tracker/EmployeeTracker')
@@ -300,6 +363,82 @@ const getCompanyDashboardRoutes = (
           {
             path: PAGE_COMPANY_DASHBOARD.myProjects.relativePath,
             element: <ManageMyProjectPage />
+          },
+          {
+            path: PAGE_COMPANY_DASHBOARD.manageDocuments.relativePath,
+            children:
+              primaryAccessRole === 'admin'
+                ? [
+                    {
+                      index: true,
+                      element: <ManageDocuments />
+                    },
+                    {
+                      path: PAGE_COMPANY_DASHBOARD.manageDocuments.create
+                        .relativePath,
+                      element: <CreateDocuments />
+                    },
+                    {
+                      path: PAGE_COMPANY_DASHBOARD.manageDocuments.edit
+                        .relativePath,
+                      element: <CreateDocuments />
+                    }
+                  ]
+                : [
+                    {
+                      index: true,
+                      element: <NotAllowedPage />
+                    }
+                  ]
+          },
+          {
+            path: PAGE_COMPANY_DASHBOARD.myProfile.relativePath,
+            children: [
+              {
+                index: true,
+                element: <ManageMyProfilePage />
+              },
+              {
+                path: PAGE_COMPANY_DASHBOARD.myProfile.personalDetails
+                  .relativePath,
+                element: <MyPersonalDetailsPage />
+              },
+              {
+                path: PAGE_COMPANY_DASHBOARD.myProfile.professionalDetails
+                  .relativePath,
+                element: <MyProfessionalDetailsPage />
+              },
+              {
+                path: PAGE_COMPANY_DASHBOARD.myProfile.addressDetails
+                  .relativePath,
+                element: <MyAddressDetailsPage />
+              },
+              {
+                path: PAGE_COMPANY_DASHBOARD.myProfile.educationDetails
+                  .relativePath,
+                element: <MyEducationDetailsPage />
+              },
+              {
+                path: PAGE_COMPANY_DASHBOARD.myProfile.familyDetails
+                  .relativePath,
+                element: <MyFamilyDetailsPage />
+              },
+              {
+                path: PAGE_COMPANY_DASHBOARD.myProfile.emergencyContactDetails
+                  .relativePath,
+                element: <MyEmergencyContactDetailsPage />
+              },
+              {
+                path: PAGE_COMPANY_DASHBOARD.myProfile.experienceDetails
+                  .relativePath,
+                element: <MyExperienceDetailsPage />
+              },
+              {
+                path: PAGE_COMPANY_DASHBOARD.myProfile.documentsDetails
+                  .relativePath,
+                element: <MyDocumentsDetailsPage />
+              }
+            ]
           }
           // {
           //   path: PAGE_COMPANY_DASHBOARD.employeeTracker.relativePath,
