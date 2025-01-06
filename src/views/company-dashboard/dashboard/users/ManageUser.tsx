@@ -189,7 +189,7 @@ const ManageUser = (): JSX.Element => {
   };
 
   /**
-   * function to open the status dialog box
+   * function to open the show activity dialog box
    *
    * @param {number} userId - id of selected user to update status
    * @param {string} userName - name of selected user to confirm
@@ -312,6 +312,7 @@ const ManageUser = (): JSX.Element => {
       const response = await getRolesRequest();
       if (response?.status.response_code === 200) {
         setRoles(response.roles || []);
+        console.log('roles are', roles);
       } else {
         showSnackbar(toastMessages.error.common, 'error');
       }

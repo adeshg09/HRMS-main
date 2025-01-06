@@ -61,5 +61,38 @@ export default {
   loadingimg: {
     width: 100,
     marginTop: 50
+  },
+  profileCard: {
+    borderRadius: '16px',
+    boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.05)',
+    marginBottom: 3,
+    overflow: 'visible'
+  },
+  headerContent: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 3
+  },
+  profileInfo: {
+    display: 'flex',
+    alignItems: 'center'
+  },
+  userInfo: {
+    marginLeft: 2
+  },
+  editButton: {
+    borderRadius: '8px',
+    textTransform: 'none'
+  },
+  infoLabel: {
+    color: 'text.secondary',
+    fontWeight: 500,
+    marginBottom: 0.5
+  },
+  infoValue: {
+    color: 'text.primary',
+    fontWeight: 400,
+    marginBottom: 2
   }
 };

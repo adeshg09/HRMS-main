@@ -113,6 +113,7 @@ const Sidebar = ({ openMobile, onMobileClose }: SidebarProps): JSX.Element => {
 
   /* Side-Effects */
   useEffect(() => {
+    console.log('sidebar pages are', sidebarPages);
     if (openMobile) {
       onMobileClose();
     }
@@ -157,6 +158,7 @@ const Sidebar = ({ openMobile, onMobileClose }: SidebarProps): JSX.Element => {
                 key={index}
                 title={item.title}
                 icon={item.icon}
+                subItems={item.subItems}
               />
             ))}
           </List>

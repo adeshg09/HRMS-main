@@ -15,7 +15,7 @@
 
 export default {
   card: (theme: any) => ({
-    maxWidth: 800,
+    maxWidth: 1000,
     margin: '0 auto',
     backgroundColor: theme.palette.background.default,
     '& .MuiCardHeader-root': {

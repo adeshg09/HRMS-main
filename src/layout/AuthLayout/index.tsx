@@ -23,7 +23,6 @@ import WebsiteLogo from 'components/WebsiteLogo';
 
 /* Local Imports */
 import styles from './index.style';
-
 // ----------------------------------------------------------------------
 
 /* Types/Interfaces */

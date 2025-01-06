@@ -97,8 +97,20 @@ export const toastMessages = {
       projectStatusUpdated: "Project's status updated successfully.",
       projectDeleted: 'Project deleted successfully.',
 
+      documentSaved: 'Document saved successfully.',
+      documentTypeUpdated: 'Document Type Updated Successfully',
+      documentTypeDeleted: 'Document Type deleted successfully',
+
       // Employee Management
       employee: {
+        // Account Setup Details
+        employeeAccountCreated: 'Employee account created successfully.',
+        employeeAccountUpdated: 'Employee account updated successfully.',
+        employeeStatusUpdated: "Employee's status updated successfully.",
+        employeeActivityStatusUpdated:
+          "Employee's activity status updated successfully.",
+        employeeAccountDeleted: 'Employee account deleted successfully.',
+
         // Personal Details
         employeePersonalDetailsSaved:
           'Employee Personal Details saved successfully.',
@@ -155,7 +167,10 @@ export const toastMessages = {
           'Employee Document Details saved successfully.',
         employeeDocumentDetailsUpdated:
           'Employee Document Details updated successfully.',
-        employeeDocumentDeleted: 'Employee Document deleted successfully.'
+        employeeDocumentDeleted: 'Employee Document deleted successfully.',
+
+        // onboard Details
+        employeeOnboard: 'Employee Onboarded Successfully'
       },
       public: {
         companyRegistered: 'Company registered successfully.'
@@ -192,7 +207,8 @@ export const toastMessages = {
       clientDuplicate: 'Client with the same name, already exist.',
       projectDuplicate: 'Project with the same name, already exist.',
       companyUserExceed:
-        'You have reached to max user limit. Please add more users in current plan.'
+        'You have reached to max user limit. Please add more users in current plan.',
+      documentDuplicate: 'Document with the same name, already exist.'
     },
     public: {
       companyDuplicate: 'Company with same name is already registered.'

@@ -4,10 +4,11 @@
 
 /* Relative Imports */
 import axiosInstance from 'config/axiosConfig';
+import { AddEmployeeFamilyDetailsFormValues } from 'models/company/employee';
 
 // ----------------------------------------------------------------------
 export const insertEmployeeFamilyDetailRequest = (
-  reqData: FormData
+  reqData: any
 ): Promise<any> => {
   return axiosInstance
     .post(
@@ -23,11 +24,12 @@ export const insertEmployeeFamilyDetailRequest = (
 };
 
 export const updateEmployeeFamilyDetailRequest = (
-  reqData: FormData
+  userId: number | null,
+  reqData: any
 ): Promise<any> => {
   return axiosInstance
     .put(
-      'admin/company/employeeFamilyDetail/UpdateEmployeeFamilyDetail',
+      `admin/company/employeeFamilyDetail/UpdateEmployeeFamilyDetail/${userId}`,
       reqData,
       {
         headers: {
@@ -35,5 +37,37 @@ export const updateEmployeeFamilyDetailRequest = (
         }
       }
     )
+    .then((response) => response.data);
+};
+export const saveEmployeeFamilyDetailRequest = (reqData: any): Promise<any> => {
+  return axiosInstance
+    .post(
+      `admin/company/employeeFamilyDetail/SaveEmployeeFamilyDetails`,
+      reqData,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+    .then((response) => response.data);
+};
+
+export const getEmployeeFamilyDetailsByUserIdRequest = (
+  userId: number | null
+): Promise<any> => {
+  return axiosInstance
+    .get(
+      `admin/company/employeeFamilyDetail/GetEmployeeFamilyDetailsByUserId/${userId}`
+    )
+    .then((response) => response.data);
+};
+export const deleteEmployeeFamilyDetailRequest = (id: any): Promise<any> => {
+  return axiosInstance
+    .post(`admin/company/employeeAddress/DeleteEmployeeAddress/${id}`, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
     .then((response) => response.data);
 };

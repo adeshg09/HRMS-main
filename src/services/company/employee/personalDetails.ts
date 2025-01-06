@@ -26,17 +26,29 @@ export const insertEmployeePersonalDetailRequest = (
 };
 
 export const updateEmployeePersonalDetailRequest = (
+  id: number | null | number[] | undefined,
   reqData: FormData
 ): Promise<any> => {
+  console.log('req id is', id);
   return axiosInstance
     .put(
-      'admin/company/employeePersonalDetail/UpdateEmployeePersonalDetail',
+      `admin/company/employeePersonalDetail/UpdateEmployeePersonalDetail/${id}`,
       reqData,
       {
         headers: {
           'Content-Type': 'application/json'
         }
       }
+    )
+    .then((response) => response.data);
+};
+
+export const getEmployeePersonalDetailsByUserIdRequest = (
+  userId: number | null
+): Promise<any> => {
+  return axiosInstance
+    .get(
+      `admin/company/employeePersonalDetail/GetEmployeePersonalDetailByUserId/${userId}`
     )
     .then((response) => response.data);
 };

@@ -79,11 +79,13 @@ const SignInForm = ({ onSubmitSuccess }: Props): JSX.Element => {
    */
   const handleFormSubmit = async (values: any): Promise<void> => {
     try {
+      console.log('tesing');
       const response = await loginUserRequest(
         values.txtEmail,
         values.txtPassword,
         values.chkRememberMe
       );
+      console.log('res is', response);
       if (response?.status.response_code === 200 && response.token) {
         onSubmitSuccess(response.token, values.chkRememberMe);
       } else if (response?.status.response_code === 202) {
@@ -97,7 +99,8 @@ const SignInForm = ({ onSubmitSuccess }: Props): JSX.Element => {
       } else {
         showSnackbar(toastMessages.error.common, 'error');
       }
-    } catch {
+    } catch (error) {
+      console.log('err is', error);
       showSnackbar(toastMessages.error.common, 'error');
     }
   };
